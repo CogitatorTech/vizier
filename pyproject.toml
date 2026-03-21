@@ -1,0 +1,10 @@
+[project]
+name = "vizier"
+version = "0.1.0"
+description = "The Python environment for the Vizier project"
+
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "python-dotenv (>=1.1.0,<2.0.0)",
+    "pre-commit (>=4.2.0,<5.0.0)"
+]
