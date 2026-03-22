@@ -141,7 +141,7 @@ test "property: parseTableRef produces non-empty parts for valid identifiers" {
 // Property: extraction of well-formed SQL-like strings
 // ============================================================================
 
-// Generate strings that look like simple SQL: "SELECT * FROM <word> WHERE <word> = <number>"
+// Generate strings that look like simple SQL: "select * from <word> where <word> = <number>"
 fn prop_simple_sql_extracts_table(input: []const u8) !void {
     // Build a simple SQL from the random input as a table name
     // Only use alphanumeric chars for the table name
@@ -160,7 +160,7 @@ fn prop_simple_sql_extracts_table(input: []const u8) !void {
 
     // Build SQL
     var sql_buf: [256]u8 = undefined;
-    const sql = std.fmt.bufPrint(&sql_buf, "SELECT * FROM {s} WHERE id = 1", .{table_name}) catch return;
+    const sql = std.fmt.bufPrint(&sql_buf, "select * from {s} where id = 1", .{table_name}) catch return;
 
     const result = extract.extractFromSql(sql);
 

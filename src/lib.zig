@@ -6,6 +6,7 @@ pub const schema = @import("vizier/schema.zig");
 pub const capture = @import("vizier/capture.zig");
 pub const extract = @import("vizier/extract.zig");
 pub const inspect = @import("vizier/inspect.zig");
+pub const advisor = @import("vizier/advisor.zig");
 pub const sql_runner = @import("vizier/sql_runner.zig");
 
 // ============================================================================
@@ -28,26 +29,44 @@ pub export fn zig_get_version() callconv(.c) [*:0]const u8 {
     return version;
 }
 
+/// Normalize a SQL string (replace literals with ?, uppercase keywords).
+/// Writes into a static buffer and returns the result. Returns the original
+/// SQL if normalization fails.
+pub export fn zig_normalize_sql(
+    sql_ptr: [*:0]const u8,
+    out_ptr: *[*]const u8,
+    out_len: *usize,
+) callconv(.c) void {
+    const S = struct {
+        var buf: [4096]u8 = undefined;
+    };
+    const sql_slice = std.mem.span(sql_ptr);
+    const normalized = extract.normalizeSql(sql_slice, &S.buf);
+    out_ptr.* = normalized.ptr;
+    out_len.* = normalized.len;
+}
+
 /// Extract predicates/tables from a SQL string and store in metadata tables.
 /// Called from flush_pending() in extension.c with the open connection.
 pub export fn zig_extract_and_store(
     conn: duckdb.duckdb_connection,
-    query_hash: i64,
+    sig_ptr: [*:0]const u8,
     sql_ptr: [*:0]const u8,
 ) callconv(.c) bool {
     const sql_slice = std.mem.span(sql_ptr);
+    const sig = std.mem.span(sig_ptr);
     const result = extract.extractFromSql(sql_slice);
 
-    // Delete existing predicates for this query hash
+    // Delete existing predicates for this signature
     var del_buf: [256]u8 = undefined;
-    const del_sql = std.fmt.bufPrint(&del_buf, "DELETE FROM vizier.workload_predicates WHERE query_hash = {d}\x00", .{query_hash}) catch return false;
+    const del_sql = std.fmt.bufPrint(&del_buf, "delete from vizier.workload_predicates where query_signature = '{s}'\x00", .{sig}) catch return false;
     sql_runner.runOnConn(conn, @ptrCast(del_sql.ptr)) catch {};
 
     // Insert each predicate
     for (result.predicateSlice()) |pred| {
         var ins_buf: [1024]u8 = undefined;
-        const ins_sql = std.fmt.bufPrint(&ins_buf, "INSERT INTO vizier.workload_predicates (query_hash, table_name, column_name, predicate_kind) VALUES ({d}, '{s}', '{s}', '{s}')\x00", .{
-            query_hash,
+        const ins_sql = std.fmt.bufPrint(&ins_buf, "insert into vizier.workload_predicates (query_signature, table_name, column_name, predicate_kind) values ('{s}', '{s}', '{s}', '{s}')\x00", .{
+            sig,
             pred.table_name,
             pred.column_name,
             pred.kind.toStr(),
@@ -62,12 +81,30 @@ pub export fn zig_extract_and_store(
     const columns_json = extract.buildColumnsJson(&result, &cols_buf);
 
     var upd_buf: [4096]u8 = undefined;
-    const upd_sql = std.fmt.bufPrint(&upd_buf, "UPDATE vizier.workload_queries SET tables_json = '{s}', columns_json = '{s}' WHERE query_hash = {d}\x00", .{
+    const upd_sql = std.fmt.bufPrint(&upd_buf, "update vizier.workload_queries set tables_json = '{s}', columns_json = '{s}' where query_signature = '{s}'\x00", .{
         tables_json,
         columns_json,
-        query_hash,
+        sig,
     }) catch return false;
     sql_runner.runOnConn(conn, @ptrCast(upd_sql.ptr)) catch {};
 
     return true;
+}
+
+// ---- Advisor SQL accessors (called from extension.c analyze function) ----
+
+pub export fn zig_get_clear_pending_sql() callconv(.c) [*:0]const u8 {
+    return advisor.clear_pending_sql;
+}
+
+pub export fn zig_get_index_advisor_sql() callconv(.c) [*:0]const u8 {
+    return advisor.index_advisor_sql;
+}
+
+pub export fn zig_get_sort_advisor_sql() callconv(.c) [*:0]const u8 {
+    return advisor.sort_advisor_sql;
+}
+
+pub export fn zig_get_count_recommendations_sql() callconv(.c) [*:0]const u8 {
+    return advisor.count_recommendations_sql;
 }

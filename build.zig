@@ -74,14 +74,14 @@ pub fn build(b: *std.Build) void {
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_lib_unit_tests.step);
+    // ---- test-unit: inline unit tests and regression tests ----
+    const test_unit_step = b.step("test-unit", "Run unit and regression tests");
+    test_unit_step.dependOn(&run_lib_unit_tests.step);
 
-    // Property-based tests using Minish framework
+    // ---- test-property: property-based tests using Minish ----
     const minish_dep = b.dependency("minish", .{});
     const minish_module = minish_dep.module("minish");
 
-    // Create modules for vizier sub-modules that tests need
     const extract_module = b.addModule("vizier/extract", .{
         .root_source_file = b.path("src/vizier/extract.zig"),
     });
@@ -108,9 +108,8 @@ pub fn build(b: *std.Build) void {
     });
     const run_prop_tests = b.addRunArtifact(prop_tests);
 
-    const prop_test_step = b.step("test-property", "Run property-based tests");
-    prop_test_step.dependOn(&run_prop_tests.step);
-    test_step.dependOn(&run_prop_tests.step);
+    const test_property_step = b.step("test-property", "Run property-based tests");
+    test_property_step.dependOn(&run_prop_tests.step);
 
     // Clean step - removes build artifacts and cache
     const clean_step = b.step("clean", "Remove build artifacts and cache");
@@ -153,17 +152,27 @@ pub fn build(b: *std.Build) void {
     metadata_cmd.step.dependOn(b.getInstallStep());
     add_metadata_step.dependOn(&metadata_cmd.step);
 
-    // Test extension with DuckDB step
-    const test_ext_step = b.step("test-extension", "Test the extension with DuckDB");
-    const test_load_cmd = b.fmt("LOAD 'zig-out/lib/{s}'; SELECT 'Extension loaded successfully' as status;", .{extension_filename});
-    const test_ext_cmd = b.addSystemCommand(&[_][]const u8{
-        "duckdb",
-        "-unsigned",
-        "-c",
-        test_load_cmd,
+    // ---- test-integration: load extension in DuckDB and validate outputs ----
+    const integration_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/integration_tests.zig"),
+        .target = target,
+        .optimize = optimize,
     });
-    test_ext_cmd.step.dependOn(&metadata_cmd.step);
-    test_ext_step.dependOn(&test_ext_cmd.step);
+
+    const integration_tests = b.addTest(.{
+        .root_module = integration_test_module,
+    });
+    const run_integration_tests = b.addRunArtifact(integration_tests);
+    run_integration_tests.step.dependOn(&metadata_cmd.step);
+
+    const test_integration_step = b.step("test-integration", "Run integration tests (requires DuckDB)");
+    test_integration_step.dependOn(&run_integration_tests.step);
+
+    // ---- test: run all tests (unit + property + integration) ----
+    const test_step = b.step("test", "Run all tests (unit, property, integration)");
+    test_step.dependOn(test_unit_step);
+    test_step.dependOn(test_property_step);
+    test_step.dependOn(test_integration_step);
 
     // Interactive DuckDB session with extension loaded
     const duckdb_step = b.step("duckdb", "Start interactive DuckDB session with extension loaded");

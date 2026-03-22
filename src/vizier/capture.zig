@@ -3,7 +3,7 @@ const duckdb = @import("duckdb");
 const sql_runner = @import("sql_runner.zig");
 
 pub const CaptureResult = struct {
-    query_hash: i64,
+    query_signature: i64,
     success: bool,
 };
 
@@ -13,7 +13,7 @@ pub fn hashQuery(sql: []const u8) u64 {
 }
 
 /// Capture a query into vizier.workload_queries.
-/// Inserts a new row or updates execution_count if the query_hash already exists.
+/// Inserts a new row or updates execution_count if the query_signature already exists.
 pub fn captureQuery(db: duckdb.duckdb_database, sql_text: [*:0]const u8) CaptureResult {
     const sql_slice = std.mem.span(sql_text);
     const hash = hashQuery(sql_slice);
@@ -23,14 +23,14 @@ pub fn captureQuery(db: duckdb.duckdb_database, sql_text: [*:0]const u8) Capture
     // We need to escape single quotes in the SQL text.
     var buf: [8192]u8 = undefined;
     const insert_sql = buildInsertSql(&buf, hash_i64, sql_slice) orelse {
-        return CaptureResult{ .query_hash = hash_i64, .success = false };
+        return CaptureResult{ .query_signature = hash_i64, .success = false };
     };
 
     sql_runner.run(db, insert_sql) catch {
-        return CaptureResult{ .query_hash = hash_i64, .success = false };
+        return CaptureResult{ .query_signature = hash_i64, .success = false };
     };
 
-    return CaptureResult{ .query_hash = hash_i64, .success = true };
+    return CaptureResult{ .query_signature = hash_i64, .success = true };
 }
 
 /// Build the INSERT SQL with escaped quotes. Returns a sentinel-terminated slice or null on overflow.
@@ -40,7 +40,7 @@ fn buildInsertSql(buf: []u8, hash: i64, sql_text: []const u8) ?[*:0]const u8 {
     const writer = fbs.writer();
 
     writer.print(
-        "INSERT INTO vizier.workload_queries (query_hash, normalized_sql, sample_sql) VALUES ({d}, '",
+        "insert into vizier.workload_queries (query_signature, normalized_sql, sample_sql) values ({d}, '",
         .{hash},
     ) catch return null;
 
@@ -65,7 +65,7 @@ fn buildInsertSql(buf: []u8, hash: i64, sql_text: []const u8) ?[*:0]const u8 {
     }
 
     writer.print(
-        "') ON CONFLICT (query_hash) DO UPDATE SET last_seen = now(), execution_count = workload_queries.execution_count + 1",
+        "') on conflict (query_signature) do update set last_seen = now(), execution_count = workload_queries.execution_count + 1",
         .{},
     ) catch return null;
 

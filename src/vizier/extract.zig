@@ -109,13 +109,13 @@ pub const ExtractionResult = struct {
 // ============================================================================
 
 const keywords = [_][]const u8{
-    "SELECT", "FROM",   "JOIN",   "LEFT",    "RIGHT",  "INNER",
-    "OUTER",  "CROSS",  "WHERE",  "AND",     "OR",     "ON",
-    "IN",     "LIKE",   "BETWEEN","GROUP",   "ORDER",  "BY",
-    "NOT",    "AS",     "HAVING", "LIMIT",   "INSERT", "UPDATE",
-    "DELETE", "SET",    "INTO",   "VALUES",  "IS",     "NULL",
-    "EXISTS", "NATURAL","FULL",   "DISTINCT","UNION",  "EXCEPT",
-    "INTERSECT","CASE", "WHEN",   "THEN",    "ELSE",   "END",
+    "SELECT",    "FROM",    "JOIN",    "LEFT",     "RIGHT",  "INNER",
+    "OUTER",     "CROSS",   "WHERE",   "AND",      "OR",     "ON",
+    "IN",        "LIKE",    "BETWEEN", "GROUP",    "ORDER",  "BY",
+    "NOT",       "AS",      "HAVING",  "LIMIT",    "INSERT", "UPDATE",
+    "DELETE",    "SET",     "INTO",    "VALUES",   "IS",     "NULL",
+    "EXISTS",    "NATURAL", "FULL",    "DISTINCT", "UNION",  "EXCEPT",
+    "INTERSECT", "CASE",    "WHEN",    "THEN",     "ELSE",   "END",
 };
 
 pub fn isKeyword(word: []const u8) bool {
@@ -330,10 +330,10 @@ pub fn extractFromSql(sql: []const u8) ExtractionResult {
 fn extractTables(tokens: []const Token, result: *ExtractionResult) void {
     var i: usize = 0;
     while (i < tokens.len) {
-        // Look for FROM or JOIN keywords
+        // Look for from or join keywords
         if (isKw(tokens[i], "FROM") or isKw(tokens[i], "JOIN")) {
             i += 1;
-            // Skip extra JOIN modifiers (e.g., LEFT OUTER JOIN — we already consumed JOIN,
+            // Skip extra join modifiers (e.g., left OUTER join — we already consumed JOIN,
             // but if we matched LEFT, skip until JOIN)
             if (isKw(tokens[i -| 1], "FROM")) {
                 // nothing extra to skip
@@ -383,12 +383,12 @@ fn extractTables(tokens: []const Token, result: *ExtractionResult) void {
             continue;
         }
 
-        // Skip JOIN modifiers (LEFT, RIGHT, etc.) — they precede JOIN
+        // Skip join modifiers (LEFT, RIGHT, etc.) — they precede join
         if (isJoinKw(tokens[i]) and !isKw(tokens[i], "JOIN")) {
             i += 1;
-            // Skip until we hit JOIN
+            // Skip until we hit join
             while (i < tokens.len and !isKw(tokens[i], "JOIN") and isJoinKw(tokens[i])) : (i += 1) {}
-            continue; // the JOIN keyword will be caught next iteration
+            continue; // the join keyword will be caught next iteration
         }
 
         i += 1;
@@ -399,10 +399,10 @@ fn extractPredicates(tokens: []const Token, result: *ExtractionResult) void {
     var i: usize = 0;
 
     while (i < tokens.len) {
-        // WHERE / AND / OR — expect predicate LHS
+        // where / and / or — expect predicate LHS
         if (isKw(tokens[i], "WHERE") or isKw(tokens[i], "AND") or isKw(tokens[i], "OR") or isKw(tokens[i], "ON")) {
             i += 1;
-            // Skip NOT
+            // Skip not
             if (i < tokens.len and isKw(tokens[i], "NOT")) i += 1;
             // Skip EXISTS
             if (i < tokens.len and isKw(tokens[i], "EXISTS")) {
@@ -445,14 +445,14 @@ fn extractPredicates(tokens: []const Token, result: *ExtractionResult) void {
                 result.addPredicate(table_name, column_name, .range);
                 i += 1;
             } else if (isKw(tokens[i], "IS")) {
-                // IS NULL / IS NOT NULL — treat as equality
+                // is null / IS not NULL — treat as equality
                 result.addPredicate(table_name, column_name, .equality);
                 i += 1;
             }
             continue;
         }
 
-        // GROUP BY
+        // group by
         if (isKw(tokens[i], "GROUP") and i + 1 < tokens.len and isKw(tokens[i + 1], "BY")) {
             i += 2;
             while (i < tokens.len) {
@@ -476,7 +476,7 @@ fn extractPredicates(tokens: []const Token, result: *ExtractionResult) void {
             continue;
         }
 
-        // ORDER BY
+        // order by
         if (isKw(tokens[i], "ORDER") and i + 1 < tokens.len and isKw(tokens[i + 1], "BY")) {
             i += 2;
             while (i < tokens.len) {
@@ -507,6 +507,48 @@ fn extractPredicates(tokens: []const Token, result: *ExtractionResult) void {
 
         i += 1;
     }
+}
+
+// ============================================================================
+// Query normalization
+// ============================================================================
+
+/// Normalize a SQL string by replacing literals with placeholders and
+/// collapsing whitespace. This makes semantically similar queries hash
+/// to the same value (e.g., where id = 1 and where id = 42 both become
+/// where id = ?).
+pub fn normalizeSql(sql: []const u8, buf: []u8) []const u8 {
+    const tok_result = tokenize(sql);
+    const tokens = tok_result.tokens[0..tok_result.count];
+
+    var fbs = std.io.fixedBufferStream(buf);
+    const w = fbs.writer();
+
+    for (tokens, 0..) |tok, i| {
+        if (tok.kind == .eof) break;
+
+        // Add space between tokens (except before/after dots, commas, parens)
+        if (i > 0 and tok.kind != .dot and tok.kind != .comma and
+            tok.kind != .rparen and tokens[i - 1].kind != .lparen and
+            tokens[i - 1].kind != .dot)
+        {
+            w.writeByte(' ') catch return fbs.getWritten();
+        }
+
+        switch (tok.kind) {
+            .string_lit => w.writeByte('?') catch return fbs.getWritten(),
+            .number => w.writeByte('?') catch return fbs.getWritten(),
+            .keyword => {
+                // Lowercase keywords for consistency
+                for (tok.text) |c| {
+                    w.writeByte(std.ascii.toLower(c)) catch return fbs.getWritten();
+                }
+            },
+            else => w.writeAll(tok.text) catch return fbs.getWritten(),
+        }
+    }
+
+    return fbs.getWritten();
 }
 
 // ============================================================================
@@ -562,14 +604,14 @@ fn findTable(result: *const ExtractionResult, name: []const u8) bool {
 }
 
 test "simple equality" {
-    const r = extractFromSql("SELECT * FROM orders WHERE customer_id = 42");
+    const r = extractFromSql("select * from orders where customer_id = 42");
     try std.testing.expect(findTable(&r, "orders"));
     try std.testing.expectEqual(@as(usize, 1), r.table_count);
     try std.testing.expect(findPredicate(&r, "orders", "customer_id", .equality));
 }
 
 test "join with aliases" {
-    const r = extractFromSql("SELECT o.id FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.total > 100 AND c.country = 'US'");
+    const r = extractFromSql("select o.id from orders o join customers c on o.customer_id = c.id where o.total > 100 and c.country = 'US'");
     try std.testing.expect(findTable(&r, "orders"));
     try std.testing.expect(findTable(&r, "customers"));
     try std.testing.expectEqual(@as(usize, 2), r.table_count);
@@ -577,37 +619,37 @@ test "join with aliases" {
     try std.testing.expect(findPredicate(&r, "customers", "country", .equality));
 }
 
-test "IN list" {
-    const r = extractFromSql("SELECT * FROM products WHERE category IN ('electronics', 'books')");
+test "in list" {
+    const r = extractFromSql("select * from products where category in ('electronics', 'books')");
     try std.testing.expect(findPredicate(&r, "products", "category", .in_list));
 }
 
 test "BETWEEN" {
-    const r = extractFromSql("SELECT * FROM events WHERE ts BETWEEN '2024-01-01' AND '2024-12-31'");
+    const r = extractFromSql("select * from events where ts between '2024-01-01' and '2024-12-31'");
     try std.testing.expect(findPredicate(&r, "events", "ts", .range));
 }
 
 test "LIKE" {
-    const r = extractFromSql("SELECT * FROM users WHERE email LIKE '%@gmail.com'");
+    const r = extractFromSql("select * from users where email like '%@gmail.com'");
     try std.testing.expect(findPredicate(&r, "users", "email", .like));
 }
 
-test "GROUP BY and ORDER BY" {
-    const r = extractFromSql("SELECT department, COUNT(*) FROM employees WHERE active = true GROUP BY department ORDER BY department");
+test "group by and order by" {
+    const r = extractFromSql("select department, count(*) from employees where active = true group by department order by department");
     try std.testing.expect(findPredicate(&r, "employees", "active", .equality));
     try std.testing.expect(findPredicate(&r, "employees", "department", .group_by));
     try std.testing.expect(findPredicate(&r, "employees", "department", .order_by));
 }
 
 test "string containing keywords not parsed" {
-    const r = extractFromSql("SELECT * FROM logs WHERE message = 'SELECT FROM WHERE'");
+    const r = extractFromSql("select * from logs where message = 'SELECT from WHERE'");
     try std.testing.expect(findTable(&r, "logs"));
     try std.testing.expectEqual(@as(usize, 1), r.table_count);
     try std.testing.expect(findPredicate(&r, "logs", "message", .equality));
 }
 
 test "multiple conditions" {
-    const r = extractFromSql("SELECT * FROM t WHERE a = 1 AND b > 2 AND c IN (3, 4)");
+    const r = extractFromSql("select * from t where a = 1 and b > 2 and c in (3, 4)");
     try std.testing.expect(findPredicate(&r, "t", "a", .equality));
     try std.testing.expect(findPredicate(&r, "t", "b", .range));
     try std.testing.expect(findPredicate(&r, "t", "c", .in_list));
@@ -615,14 +657,14 @@ test "multiple conditions" {
 }
 
 test "tables json builder" {
-    const r = extractFromSql("SELECT * FROM orders o JOIN customers c ON o.cid = c.id");
+    const r = extractFromSql("select * from orders o join customers c on o.cid = c.id");
     var buf: [256]u8 = undefined;
     const json = buildTablesJson(&r, &buf);
     try std.testing.expectEqualStrings("[\"orders\",\"customers\"]", json);
 }
 
 test "columns json builder" {
-    const r = extractFromSql("SELECT * FROM orders WHERE customer_id = 42 AND amount > 100");
+    const r = extractFromSql("select * from orders where customer_id = 42 and amount > 100");
     var buf: [256]u8 = undefined;
     const json = buildColumnsJson(&r, &buf);
     try std.testing.expectEqualStrings("[\"orders.customer_id\",\"orders.amount\"]", json);
@@ -632,14 +674,14 @@ test "columns json builder" {
 
 test "regression: alias resolution is case-insensitive" {
     // Bug: eqlLower expected uppercase second arg, but aliases are lowercase.
-    // resolveAlias("o") failed to match alias "o" stored from "FROM orders o".
-    const r = extractFromSql("SELECT o.id FROM orders o WHERE o.total > 100");
+    // resolveAlias("o") failed to match alias "o" stored from "from orders o".
+    const r = extractFromSql("select o.id from orders o where o.total > 100");
     try std.testing.expect(findPredicate(&r, "orders", "total", .range));
 }
 
 test "regression: tokenizer handles >= operator correctly" {
     // Ensure two-char operators like >= don't get split into > and =
-    const r = extractFromSql("SELECT * FROM events WHERE ts >= '2024-01-01'");
+    const r = extractFromSql("select * from events where ts >= '2024-01-01'");
     try std.testing.expect(findPredicate(&r, "events", "ts", .range));
     try std.testing.expectEqual(@as(usize, 1), r.predicate_count);
 }
@@ -651,41 +693,69 @@ test "regression: empty SQL produces no results" {
 }
 
 test "regression: SQL with only keywords" {
-    const r = extractFromSql("SELECT FROM WHERE");
+    const r = extractFromSql("select from where");
     try std.testing.expectEqual(@as(usize, 0), r.table_count);
 }
 
-test "LEFT JOIN extracts table" {
-    const r = extractFromSql("SELECT * FROM a LEFT JOIN b ON a.id = b.aid WHERE b.x = 1");
+test "left join extracts table" {
+    const r = extractFromSql("select * from a left join b on a.id = b.aid where b.x = 1");
     try std.testing.expect(findTable(&r, "a"));
     try std.testing.expect(findTable(&r, "b"));
     try std.testing.expectEqual(@as(usize, 2), r.table_count);
 }
 
-test "IS NULL treated as equality predicate" {
-    const r = extractFromSql("SELECT * FROM t WHERE col IS NULL");
+test "is null treated as equality predicate" {
+    const r = extractFromSql("select * from t where col is null");
     try std.testing.expect(findPredicate(&r, "t", "col", .equality));
 }
 
-test "NOT does not break predicate extraction" {
-    const r = extractFromSql("SELECT * FROM t WHERE NOT active = false");
+test "not does not break predicate extraction" {
+    const r = extractFromSql("select * from t where not active = false");
     try std.testing.expect(findPredicate(&r, "t", "active", .equality));
 }
 
 test "quoted identifier" {
-    const r = extractFromSql("SELECT * FROM \"my table\" WHERE \"my col\" = 1");
+    const r = extractFromSql("select * from \"my table\" where \"my col\" = 1");
     try std.testing.expect(findTable(&r, "my table"));
     try std.testing.expect(findPredicate(&r, "my table", "my col", .equality));
 }
 
 test "line comment is ignored" {
-    const r = extractFromSql("SELECT * FROM t -- this is a comment\nWHERE x = 1");
+    const r = extractFromSql("select * from t -- this is a comment\nWHERE x = 1");
     try std.testing.expect(findTable(&r, "t"));
     try std.testing.expect(findPredicate(&r, "t", "x", .equality));
 }
 
 test "block comment is ignored" {
-    const r = extractFromSql("SELECT * FROM t /* comment */ WHERE x = 1");
+    const r = extractFromSql("select * from t /* comment */ where x = 1");
     try std.testing.expect(findTable(&r, "t"));
     try std.testing.expect(findPredicate(&r, "t", "x", .equality));
+}
+
+// --- Normalization tests ---
+
+test "normalization replaces number literals with ?" {
+    var buf: [256]u8 = undefined;
+    const norm = normalizeSql("select * from t where id = 42", &buf);
+    try std.testing.expectEqualStrings("select * from t where id = ?", norm);
+}
+
+test "normalization replaces string literals with ?" {
+    var buf: [256]u8 = undefined;
+    const norm = normalizeSql("select * from t where name = 'alice'", &buf);
+    try std.testing.expectEqualStrings("select * from t where name = ?", norm);
+}
+
+test "normalization lowercases keywords" {
+    var buf: [256]u8 = undefined;
+    const norm = normalizeSql("select * from t where x = 1", &buf);
+    try std.testing.expectEqualStrings("select * from t where x = ?", norm);
+}
+
+test "normalization makes similar queries identical" {
+    var buf1: [256]u8 = undefined;
+    var buf2: [256]u8 = undefined;
+    const n1 = normalizeSql("select * from orders where customer_id = 42", &buf1);
+    const n2 = normalizeSql("select * from orders where customer_id = 99", &buf2);
+    try std.testing.expectEqualStrings(n1, n2);
 }

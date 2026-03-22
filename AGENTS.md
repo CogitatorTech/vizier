@@ -16,7 +16,7 @@ Priorities, in order:
 ## Core Rules
 
 - Use English for code, comments, docs, and tests.
-- Keep global mutable state minimal; currently limited to the capture buffer and DB handle in `extension.c`.
+- Keep global mutable state minimal; currently limited to the capture buffer and persistent connection (`g_flush_conn`) in `extension.c`.
 - Prefer small, focused changes over large refactoring.
 - Add comments only when they clarify non-obvious behavior.
 - Do not add features, error handling, or abstractions beyond what is needed for the current task.
@@ -25,13 +25,17 @@ Priorities, in order:
 
 - `src/extension.c`: C entry point, DuckDB function registration, capture/flush logic.
 - `src/lib.zig`: Root Zig module with C-exported functions.
-- `src/lib_test.zig`: Unit tests (no DuckDB runtime required).
+- `src/lib_test.zig`: Test harness that pulls in all inline module tests.
 - `src/duckdb.zig`: Auto-generated DuckDB C API bindings (do not edit manually).
 - `src/vizier/schema.zig`: DDL for metadata tables and views.
 - `src/vizier/capture.zig`: Query hashing and INSERT SQL building.
 - `src/vizier/extract.zig`: Heuristic SQL tokenizer and predicate/table extractor (pure Zig, no DB deps).
 - `src/vizier/sql_runner.zig`: Connect/query/disconnect wrapper using `duckdb_ext_api`. Also `runOnConn()` for reusing an existing connection.
+- `src/vizier/inspect.zig`: Table reference parsing (pure Zig). The `inspect_table` macro is defined in `schema.zig`.
+- `src/vizier/advisor.zig`: Index and sort advisor SQL queries, recommendation helper functions.
 - `src/vizier/summary.zig`: Workload summary view SQL definition.
+- `tests/property_tests.zig`: Property-based tests (using the Minish framework).
+- `tests/integration_tests.zig`: Integration tests that spawn DuckDB and validate output.
 - `scripts/`: Build tooling (metadata appender script).
 - `build.zig` / `build.zig.zon`: Zig build configuration and dependencies.
 - `Makefile`: GNU Make wrapper around `zig build`.
@@ -49,19 +53,20 @@ Priorities, in order:
 
 These are hard constraints discovered during development:
 
-- **No new connections from table function callbacks.** Opening `duckdb_connect` from bind/init/execute callbacks causes segfaults on subsequent
-  calls. Use the in-memory buffer + flush pattern instead.
-- **`duckdb_value_*` functions are not in `duckdb_ext_api_v1`.** Use `duckdb_fetch_chunk` + vector operations to read query results.
-- **Type mismatches cause segfaults.** When copying vector data between chunks, the source column types must match exactly (e.g., INT32 vs BIGINT).
+- No new connections from table function callbacks after init. Opening `duckdb_connect` from callbacks causes segfaults or stale handles. Use the
+  persistent connection (`g_flush_conn`) opened during init, or use SQL VIEWs/MACROs that run on the user's connection.
+- `duckdb_value_*` functions are not in `duckdb_ext_api_v1`. Use `duckdb_fetch_chunk` + vector operations to read query results.
+- Type mismatches cause segfaults.** When copying vector data between chunks, the source column types must match exactly (e.g., INT32 vs BIGINT).
   Use explicit casts in SQL queries if needed.
-- **`duckdb_query` executes only one statement.** Multi-statement strings silently ignore everything after the first semicolon.
-- **`access->get_database(info)` may return a temporary pointer.** Heap-copy the `duckdb_database` value if storing it beyond the entry point scope.
+- `duckdb_query` executes only one statement.** Multi-statement strings silently ignore everything after the first semicolon.
+- `access->get_database(info)` may return a temporary pointer. Heap-copy the `duckdb_database` value if storing it beyond the entry point scope.
 
 ### Capture / Flush Pattern
 
 Queries are buffered in a global C array (`g_pending`), not written to DB immediately.
-`vizier_flush()` opens a connection and writes all pending captures in one batch.
-`vizier.workload_summary` is a SQL VIEW, not a table function, to avoid snapshot isolation issues.
+`vizier_flush()` uses a persistent connection (`g_flush_conn`) opened during extension init to write all pending captures.
+`vizier.workload_summary` and `vizier.inspect_table()` are SQL VIEWs/MACROs, not table functions, because they run on the user's connection and avoid
+snapshot isolation issues.
 
 ## Zig and C Conventions
 
@@ -69,48 +74,45 @@ Queries are buffered in a global C array (`g_pending`), not written to DB immedi
 - Zig code accesses DuckDB functions via `extern var duckdb_ext_api: duckdb.duckdb_ext_api_v1`.
 - C code uses `-std=c11` and includes `duckdb_extension.h`.
 - C formatting is handled by `clang-format`; Zig formatting by `zig fmt`.
+- SQL keywords must be lowercase. Write `select`, `from`, `where`, `create table`, not `SELECT`, `FROM`, `WHERE`, `CREATE TABLE`. This applies to all
+  SQL strings in Zig modules, C source, and generated recommendation SQL.
 
 ## Required Validation
 
-Run these checks for any change:
+Run `make test` for any change. This runs all three test suites:
 
-1. `make build-all` (builds extension with DuckDB metadata)
-2. `make test` (unit tests)
+| Target            | Command                 | What it runs                                                    |
+|-------------------|-------------------------|-----------------------------------------------------------------|
+| Unit + regression | `make test-unit`        | Inline `test` blocks in `src/vizier/*.zig`                      |
+| Property-based    | `make test-property`    | `tests/property_tests.zig` with Minish                          |
+| Integration       | `make test-integration` | `tests/integration_tests.zig` — spawns DuckDB, validates output |
+| All               | `make test`             | Runs all of the above                                           |
 
-For integration testing:
-
-3. `make duckdb` then exercise the changed functionality interactively.
-
-Quick smoke test:
-
-```sql
-LOAD vizier;
-
-SELECT vizier_version();
-SELECT * FROM vizier_capture_query('SELECT 1');
-SELECT * FROM vizier_flush();
-SELECT * FROM vizier.workload_summary;
-```
+For interactive exploration: `make duckdb`.
 
 ## First Contribution Flow
 
 1. Read `src/extension.c` and the relevant `src/vizier/*.zig` module.
 2. Implement the smallest possible change.
-3. Add or update tests in `src/lib_test.zig` or inline `test` blocks in Zig modules.
-4. Run `make build-all && make test`.
-5. Verify interactively with `make duckdb` if the change affects SQL-visible behavior.
+3. Add or update inline `test` blocks in the changed Zig module. Add integration tests in `tests/integration_tests.zig` if SQL behavior changed.
+4. Run `make test`.
+5. Verify interactively with `make duckdb` if needed.
 
 Good first tasks:
 
 - Add a new metadata column to a vizier table (update DDL in `schema.zig`).
-- Improve query normalization in `capture.zig` (strip whitespace, lowercase keywords).
+- Add a new advisor in `advisor.zig` (follow the index/sort advisor SQL pattern).
 - Add a new scalar function (follow the `vizier_version` pattern in `extension.c`).
 
 ## Testing Expectations
 
-- No SQL-facing change is complete without a test or interactive verification.
-- Unit tests in Zig should not require DuckDB runtime; test pure logic (hashing, SQL building).
-- Integration tests use `make test-extension` or manual `make duckdb` verification.
+- Unit/regression tests live as inline `test` blocks in the module they cover (`src/vizier/*.zig`). `src/lib_test.zig` is just a harness that
+  pulls them in. No DuckDB runtime is required.
+- Property-based tests live in `tests/property_tests.zig` using the Minish framework. Use these to fuzz parsers and verify invariants (like the
+  "tokenizer never crashes on arbitrary input").
+- Integration tests live in `tests/integration_tests.zig`. They spawn `duckdb` as a child process, load the extension, run SQL, and assert on the
+  output. Add a test here for any new SQL-visible function.
+- No SQL-facing change is complete without an integration test.
 
 ## Change Design Checklist
 
@@ -118,14 +120,12 @@ Before coding:
 
 1. Identify whether the change touches C callbacks, Zig logic, or both.
 2. Check if new DuckDB API functions are needed and verify they exist in `duckdb_ext_api_v1`.
-3. Consider the capture/flush constraint if the change involves writing data from callbacks.
+3. Consider the capture or flush constraint if the change involves writing data from callbacks.
 
 Before submitting:
 
-1. `make build-all` succeeds.
-2. `make test` passes.
-3. Interactive smoke test passes if SQL behavior is changed.
-4. Docs updated if the API surface changed.
+1. `make test` passes (all three suites).
+2. Docs updated if the API surface changed.
 
 ## Commit and PR Hygiene
 
@@ -138,8 +138,7 @@ Before submitting:
 
 Suggested PR checklist:
 
-- [ ] Tests added/updated for behavior changes
-- [ ] `make build-all` passes
-- [ ] `make test` passes
-- [ ] Interactive smoke test done (if SQL behavior is changed)
+- [ ] Inline unit tests added/updated for logic changes
+- [ ] Integration test added for new SQL-visible functions
+- [ ] `make test` passes (unit + property + integration)
 - [ ] Docs/README updated (if API surface changed)

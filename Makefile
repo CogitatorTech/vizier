@@ -24,7 +24,7 @@ SHELL         := /usr/bin/env bash
 # Targets
 ################################################################################
 
-.PHONY: all help build build-all rebuild test test-extension release clean lint format docs serve-docs install-deps duckdb-translate duckdb
+.PHONY: all help build build-all rebuild test test-unit test-property test-integration release clean lint format docs serve-docs install-deps duckdb-translate duckdb
 .DEFAULT_GOAL := help
 
 help: ## Show the help messages for all targets
@@ -62,17 +62,32 @@ build-all: ## Build extension with DuckDB metadata (ready to load)
 
 rebuild: clean build-all  ## Clean and build with metadata
 
-test: ## Run Zig unit tests
-	@echo "Running unit tests..."
-	@$(ZIG) build test -j$(JOBS) $(TEST_FLAGS)
-
-test-extension: build-all  ## Test extension loading in DuckDB
-	@echo "Testing the extension in DuckDB..."
-	@$(ZIG) build test-extension \
+test: ## Run all tests (unit, property, integration)
+	@echo "Running all tests..."
+	@$(ZIG) build test \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
 		-Dextension-version=$(EXTENSION_VERSION) \
-		-Dplatform=$(PLATFORM)
+		-Dplatform=$(PLATFORM) \
+		-j$(JOBS) $(TEST_FLAGS)
+
+test-unit: ## Run unit and regression tests
+	@echo "Running unit tests..."
+	@$(ZIG) build test-unit -j$(JOBS) $(TEST_FLAGS)
+
+test-property: ## Run property-based tests (Minish)
+	@echo "Running property-based tests..."
+	@$(ZIG) build test-property -j$(JOBS) $(TEST_FLAGS)
+
+test-integration: build-all  ## Run integration tests (requires DuckDB)
+	@echo "Running integration tests..."
+	@$(ZIG) build test-integration \
+		-Dextension-name=$(EXTENSION_NAME) \
+		-Dapi-version=$(EXTENSION_API_VERSION) \
+		-Dextension-version=$(EXTENSION_VERSION) \
+		-Dplatform=$(PLATFORM) \
+		$(TEST_FLAGS)
+
 
 release: ## Build in ReleaseFast mode with metadata
 	@echo "Building the extension in Release mode with API $(EXTENSION_API_VERSION)..."
