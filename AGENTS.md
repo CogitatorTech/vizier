@@ -4,7 +4,8 @@ This file provides guidance to coding agents collaborating on this repository.
 
 ## Mission
 
-Vizier is a physical design advisor for DuckDB, implemented as a DuckDB extension in Zig and C.
+Vizier is a database advisor and finetuner for DuckDB.
+It is implemented as a DuckDB extension in Zig and C.
 Priorities, in order:
 
 1. Correct, trustworthy recommendations backed by transparent scoring.
@@ -28,7 +29,8 @@ Priorities, in order:
 - `src/duckdb.zig`: Auto-generated DuckDB C API bindings (do not edit manually).
 - `src/vizier/schema.zig`: DDL for metadata tables and views.
 - `src/vizier/capture.zig`: Query hashing and INSERT SQL building.
-- `src/vizier/sql_runner.zig`: Connect/query/disconnect wrapper using `duckdb_ext_api`.
+- `src/vizier/extract.zig`: Heuristic SQL tokenizer and predicate/table extractor (pure Zig, no DB deps).
+- `src/vizier/sql_runner.zig`: Connect/query/disconnect wrapper using `duckdb_ext_api`. Also `runOnConn()` for reusing an existing connection.
 - `src/vizier/summary.zig`: Workload summary view SQL definition.
 - `scripts/`: Build tooling (metadata appender script).
 - `build.zig` / `build.zig.zon`: Zig build configuration and dependencies.

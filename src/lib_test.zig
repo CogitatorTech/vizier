@@ -1,8 +1,14 @@
 const std = @import("std");
 const testing = std.testing;
 
-// Import capture module for hash testing
+// Import modules to run their tests
 const capture = @import("vizier/capture.zig");
+const extract = @import("vizier/extract.zig");
+
+// Force extract module tests to be included
+comptime {
+    _ = extract;
+}
 
 test "hashQuery is deterministic" {
     const sql = "SELECT * FROM foo WHERE id = 1";

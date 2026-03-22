@@ -10,8 +10,9 @@ DUCKDB_EXTENSION_EXTERN
 // Forward declarations for Zig functions
 // ============================================================================
 extern bool zig_init_schema(duckdb_database db);
-
 extern const char *zig_get_version(void);
+extern bool zig_extract_and_store(duckdb_connection conn, int64_t query_hash,
+                                  const char *sql_text);
 
 // ============================================================================
 // Global state
@@ -83,6 +84,10 @@ static bool flush_pending(void) {
     memset(&result, 0, sizeof(result));
     if (duckdb_query(conn, buf, &result) != DuckDBSuccess) {
       all_ok = false;
+    } else {
+      // Extract predicates and update tables_json/columns_json
+      zig_extract_and_store(conn, g_pending[i].query_hash,
+                            g_pending[i].sql_text);
     }
     duckdb_destroy_result(&result);
   }

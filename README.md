@@ -1,8 +1,4 @@
 <div align="center">
-  <picture>
-    <img alt="Project Logo" src="logo.svg" height="20%" width="20%">
-  </picture>
-<br>
 
 <h2>Vizier</h2>
 
@@ -10,25 +6,25 @@
 [![Zig Version](https://img.shields.io/badge/Zig-0.15.2-orange?logo=zig&labelColor=282c34)](https://ziglang.org/download/)
 [![License](https://img.shields.io/badge/license-MIT-007ec6?label=license&style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/CogitatorTech/vizier/blob/main/LICENSE)
 
-A database advisor and tuner for DuckDB
+A database advisor and finetuner for DuckDB
 
 </div>
 
 ---
 
-Vizier is a tool for analyzing and tuning DuckDB databases.
-It provides a set of functions to capture queries from a workload, analyze the physical design of the database,
-and generate recommendations for improving query performance.
+Vizier is a tool for analyzing and finetuning DuckDB databases.
+It provides a set of functions to capture query metadata, analyze workloads, inspect physical database and table design,
+and generate recommendations for improving performance.
 It is implemented as a DuckDB extension in Zig.
 
 ### Features
 
 * Capture query patterns and execution stats
-* Inspect current physical design (indexes, table sizes, cardinalities)
+* Inspect current physical design (indexes, table sizes, cardinalities, etc.)
 * Analyze the workload to find bottlenecks
-* Recommend changes (indexes, sort orders, Parquet layouts, summary tables)
+* Recommend changes (indexes, sort orders, Parquet layouts, summary tables, etc.)
 * Apply recommendations with dry-run support
-* Benchmark before/after impact
+* Benchmark before and after applying changes
 
 ---
 
@@ -89,7 +85,7 @@ SELECT * FROM vizier.workload_summary;
 | `vizier.workload_predicates`  | Table          | Predicate tracking per query                 |
 | `vizier.recommendation_store` | Table          | Generated recommendations                    |
 | `vizier.applied_actions`      | Table          | Applied recommendation log                   |
-| `vizier.benchmark_results`    | Table          | Before/after benchmark data                  |
+| `vizier.benchmark_results`    | Table          | Before and after benchmark data              |
 
 ---
 
@@ -100,7 +96,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to make a contribution
 ### License
 
 This project is licensed under the MIT License (see [LICENSE](LICENSE)).
-
-### Acknowledgements
-
-* The logo is from [SVG Repo](https://www.svgrepo.com/svg/117247/duck-footprints) with some modifications.
