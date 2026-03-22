@@ -95,6 +95,31 @@ test "buildInsertSql handles single quotes" {
     const result = buildInsertSql(&buf, 42, "SELECT * FROM foo WHERE name = 'bar'");
     try std.testing.expect(result != null);
     const sql = std.mem.span(result.?);
-    // Should contain escaped quotes
     try std.testing.expect(std.mem.indexOf(u8, sql, "''bar''") != null);
+}
+
+test "buildInsertSql uses now() not current_timestamp" {
+    // Regression: ON CONFLICT with current_timestamp was interpreted as a column name.
+    // Fix: use now() instead.
+    var buf: [8192]u8 = undefined;
+    const result = buildInsertSql(&buf, 1, "test");
+    try std.testing.expect(result != null);
+    const sql = std.mem.span(result.?);
+    try std.testing.expect(std.mem.indexOf(u8, sql, "now()") != null);
+    try std.testing.expect(std.mem.indexOf(u8, sql, "current_timestamp") == null);
+}
+
+test "buildInsertSql produces null-terminated string" {
+    var buf: [8192]u8 = undefined;
+    const result = buildInsertSql(&buf, 99, "SELECT 1");
+    try std.testing.expect(result != null);
+    // Should be usable as a C string
+    const sql = std.mem.span(result.?);
+    try std.testing.expect(sql.len > 0);
+}
+
+test "buildInsertSql returns null on buffer overflow" {
+    var buf: [32]u8 = undefined; // too small
+    const result = buildInsertSql(&buf, 1, "SELECT 1");
+    try std.testing.expect(result == null);
 }

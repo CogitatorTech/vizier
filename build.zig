@@ -77,6 +77,41 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
 
+    // Property-based tests using Minish framework
+    const minish_dep = b.dependency("minish", .{});
+    const minish_module = minish_dep.module("minish");
+
+    // Create modules for vizier sub-modules that tests need
+    const extract_module = b.addModule("vizier/extract", .{
+        .root_source_file = b.path("src/vizier/extract.zig"),
+    });
+    const capture_module = b.addModule("vizier/capture", .{
+        .root_source_file = b.path("src/vizier/capture.zig"),
+    });
+    const inspect_module = b.addModule("vizier/inspect", .{
+        .root_source_file = b.path("src/vizier/inspect.zig"),
+    });
+
+    const prop_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/property_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    prop_test_module.addImport("duckdb", duckdb_module);
+    prop_test_module.addImport("minish", minish_module);
+    prop_test_module.addImport("vizier/extract", extract_module);
+    prop_test_module.addImport("vizier/capture", capture_module);
+    prop_test_module.addImport("vizier/inspect", inspect_module);
+
+    const prop_tests = b.addTest(.{
+        .root_module = prop_test_module,
+    });
+    const run_prop_tests = b.addRunArtifact(prop_tests);
+
+    const prop_test_step = b.step("test-property", "Run property-based tests");
+    prop_test_step.dependOn(&run_prop_tests.step);
+    test_step.dependOn(&run_prop_tests.step);
+
     // Clean step - removes build artifacts and cache
     const clean_step = b.step("clean", "Remove build artifacts and cache");
     const clean_cmd = b.addSystemCommand(&[_][]const u8{

@@ -118,7 +118,7 @@ const keywords = [_][]const u8{
     "INTERSECT","CASE", "WHEN",   "THEN",    "ELSE",   "END",
 };
 
-fn isKeyword(word: []const u8) bool {
+pub fn isKeyword(word: []const u8) bool {
     for (keywords) |kw| {
         if (eqlLower(word, kw)) return true;
     }
@@ -626,4 +626,66 @@ test "columns json builder" {
     var buf: [256]u8 = undefined;
     const json = buildColumnsJson(&r, &buf);
     try std.testing.expectEqualStrings("[\"orders.customer_id\",\"orders.amount\"]", json);
+}
+
+// --- Regression tests for bugs found during development ---
+
+test "regression: alias resolution is case-insensitive" {
+    // Bug: eqlLower expected uppercase second arg, but aliases are lowercase.
+    // resolveAlias("o") failed to match alias "o" stored from "FROM orders o".
+    const r = extractFromSql("SELECT o.id FROM orders o WHERE o.total > 100");
+    try std.testing.expect(findPredicate(&r, "orders", "total", .range));
+}
+
+test "regression: tokenizer handles >= operator correctly" {
+    // Ensure two-char operators like >= don't get split into > and =
+    const r = extractFromSql("SELECT * FROM events WHERE ts >= '2024-01-01'");
+    try std.testing.expect(findPredicate(&r, "events", "ts", .range));
+    try std.testing.expectEqual(@as(usize, 1), r.predicate_count);
+}
+
+test "regression: empty SQL produces no results" {
+    const r = extractFromSql("");
+    try std.testing.expectEqual(@as(usize, 0), r.table_count);
+    try std.testing.expectEqual(@as(usize, 0), r.predicate_count);
+}
+
+test "regression: SQL with only keywords" {
+    const r = extractFromSql("SELECT FROM WHERE");
+    try std.testing.expectEqual(@as(usize, 0), r.table_count);
+}
+
+test "LEFT JOIN extracts table" {
+    const r = extractFromSql("SELECT * FROM a LEFT JOIN b ON a.id = b.aid WHERE b.x = 1");
+    try std.testing.expect(findTable(&r, "a"));
+    try std.testing.expect(findTable(&r, "b"));
+    try std.testing.expectEqual(@as(usize, 2), r.table_count);
+}
+
+test "IS NULL treated as equality predicate" {
+    const r = extractFromSql("SELECT * FROM t WHERE col IS NULL");
+    try std.testing.expect(findPredicate(&r, "t", "col", .equality));
+}
+
+test "NOT does not break predicate extraction" {
+    const r = extractFromSql("SELECT * FROM t WHERE NOT active = false");
+    try std.testing.expect(findPredicate(&r, "t", "active", .equality));
+}
+
+test "quoted identifier" {
+    const r = extractFromSql("SELECT * FROM \"my table\" WHERE \"my col\" = 1");
+    try std.testing.expect(findTable(&r, "my table"));
+    try std.testing.expect(findPredicate(&r, "my table", "my col", .equality));
+}
+
+test "line comment is ignored" {
+    const r = extractFromSql("SELECT * FROM t -- this is a comment\nWHERE x = 1");
+    try std.testing.expect(findTable(&r, "t"));
+    try std.testing.expect(findPredicate(&r, "t", "x", .equality));
+}
+
+test "block comment is ignored" {
+    const r = extractFromSql("SELECT * FROM t /* comment */ WHERE x = 1");
+    try std.testing.expect(findTable(&r, "t"));
+    try std.testing.expect(findPredicate(&r, "t", "x", .equality));
 }
