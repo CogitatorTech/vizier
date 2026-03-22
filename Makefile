@@ -171,7 +171,7 @@ build-multi-version: ## Build extension (works with DuckDB v1.2.0 and later)
 	@echo "Done! This extension works with DuckDB v1.2.0 or newer"
 
 # Cross-compilation targets
-.PHONY: build-linux-amd64 build-linux-arm64 build-linux-amd64-musl build-linux-arm64-musl build-macos-amd64 build-macos-arm64 build-windows-amd64 build-windows-arm64
+.PHONY: build-linux-amd64 build-linux-arm64 build-linux-amd64-musl build-linux-arm64-musl build-macos-amd64 build-macos-arm64 build-windows-amd64 build-windows-arm64 build-freebsd-amd64 build-freebsd-arm64
 build-linux-amd64: ## Build for Linux x86_64
 	@echo "Building for Linux AMD64..."
 	@$(ZIG) build build-all \
@@ -268,9 +268,33 @@ build-windows-arm64: ## Build for Windows ARM64
 	@mkdir -p $(BUILD_DIR)/lib/windows_arm64
 	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/windows_arm64/extension.duckdb_extension
 
+build-freebsd-amd64: ## Build for FreeBSD x86_64
+	@echo "Building for FreeBSD AMD64..."
+	@$(ZIG) build build-all \
+		-Dtarget=x86_64-freebsd \
+		-Dextension-name=$(EXTENSION_NAME) \
+		-Dapi-version=$(EXTENSION_API_VERSION) \
+		-Dextension-version=$(EXTENSION_VERSION) \
+		-Dplatform=freebsd_amd64 \
+		-j$(JOBS)
+	@mkdir -p $(BUILD_DIR)/lib/freebsd_amd64
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/freebsd_amd64/extension.duckdb_extension
+
+build-freebsd-arm64: ## Build for FreeBSD ARM64
+	@echo "Building for FreeBSD ARM64..."
+	@$(ZIG) build build-all \
+		-Dtarget=aarch64-freebsd \
+		-Dextension-name=$(EXTENSION_NAME) \
+		-Dapi-version=$(EXTENSION_API_VERSION) \
+		-Dextension-version=$(EXTENSION_VERSION) \
+		-Dplatform=freebsd_arm64 \
+		-j$(JOBS)
+	@mkdir -p $(BUILD_DIR)/lib/freebsd_arm64
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/freebsd_arm64/extension.duckdb_extension
+
 # Build for all major platforms
 .PHONY: build-all-platforms
-build-all-platforms: ## Build for all major platforms (Linux glibc, Linux musl, macOS, and Windows)
+build-all-platforms: ## Build for all major platforms (Linux glibc, Linux musl, macOS, Windows, and FreeBSD)
 	@echo "Building the extension for all major platforms..."
 	@$(MAKE) build-linux-amd64
 	@$(MAKE) build-linux-arm64
@@ -280,6 +304,8 @@ build-all-platforms: ## Build for all major platforms (Linux glibc, Linux musl, 
 	@$(MAKE) build-macos-arm64
 	@$(MAKE) build-windows-amd64
 	@$(MAKE) build-windows-arm64
+	@$(MAKE) build-freebsd-amd64
+	@$(MAKE) build-freebsd-arm64
 	@echo ""
 	@echo "Done! Built for all platforms:"
 	@find $(BUILD_DIR)/lib -name "${EXTENSION_NAME}.duckdb_extension" -type f -exec echo "  {}" \; -exec ls -lh {} \;

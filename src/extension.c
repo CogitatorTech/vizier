@@ -2,7 +2,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/time.h>
+#endif
 
 // This macro declares the duckdb_ext_api global and sets up the extension API
 DUCKDB_EXTENSION_EXTERN
@@ -1121,9 +1126,16 @@ static void apply_execute(duckdb_function_info info, duckdb_data_chunk output) {
 // ============================================================================
 
 static double get_time_ms(void) {
+#ifdef _WIN32
+  LARGE_INTEGER freq, count;
+  QueryPerformanceFrequency(&freq);
+  QueryPerformanceCounter(&count);
+  return (double)count.QuadPart / (double)freq.QuadPart * 1000.0;
+#else
   struct timeval tv;
   gettimeofday(&tv, NULL);
   return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
+#endif
 }
 
 static int compare_double(const void *a, const void *b) {
