@@ -429,12 +429,28 @@ fn extractPredicates(tokens: []const Token, result: *ExtractionResult) void {
 
             if (tokens[i].kind == .operator) {
                 const op = tokens[i].text;
-                if (std.mem.eql(u8, op, "=") or std.mem.eql(u8, op, "!=") or std.mem.eql(u8, op, "<>")) {
+                const is_eq = std.mem.eql(u8, op, "=") or std.mem.eql(u8, op, "!=") or std.mem.eql(u8, op, "<>");
+                if (is_eq) {
                     result.addPredicate(table_name, column_name, .equality);
                 } else {
                     result.addPredicate(table_name, column_name, .range);
                 }
                 i += 1;
+                // Also extract RHS if it's a column reference (e.g., join: a.col = b.col)
+                if (is_eq and i < tokens.len and tokens[i].kind == .identifier) {
+                    var rhs_table: []const u8 = result.defaultTable();
+                    var rhs_col = tokens[i].text;
+                    i += 1;
+                    if (i + 1 < tokens.len and tokens[i].kind == .dot and tokens[i + 1].kind == .identifier) {
+                        rhs_table = result.resolveAlias(rhs_col);
+                        rhs_col = tokens[i + 1].text;
+                        i += 2;
+                    }
+                    // Only add RHS if it resolves to a different table (join condition)
+                    if (!std.mem.eql(u8, rhs_table, table_name) or !std.mem.eql(u8, rhs_col, column_name)) {
+                        result.addPredicate(rhs_table, rhs_col, .equality);
+                    }
+                }
             } else if (isKw(tokens[i], "IN")) {
                 result.addPredicate(table_name, column_name, .in_list);
                 i += 1;
@@ -615,8 +631,21 @@ test "join with aliases" {
     try std.testing.expect(findTable(&r, "orders"));
     try std.testing.expect(findTable(&r, "customers"));
     try std.testing.expectEqual(@as(usize, 2), r.table_count);
+    // Both sides of ON clause extracted
+    try std.testing.expect(findPredicate(&r, "orders", "customer_id", .equality));
+    try std.testing.expect(findPredicate(&r, "customers", "id", .equality));
+    // WHERE predicates
     try std.testing.expect(findPredicate(&r, "orders", "total", .range));
     try std.testing.expect(findPredicate(&r, "customers", "country", .equality));
+}
+
+test "join RHS extraction for multi-table join" {
+    const r = extractFromSql("select * from a join b on a.x = b.y join c on b.z = c.w where a.id = 1");
+    try std.testing.expect(findPredicate(&r, "a", "x", .equality));
+    try std.testing.expect(findPredicate(&r, "b", "y", .equality));
+    try std.testing.expect(findPredicate(&r, "b", "z", .equality));
+    try std.testing.expect(findPredicate(&r, "c", "w", .equality));
+    try std.testing.expect(findPredicate(&r, "a", "id", .equality));
 }
 
 test "in list" {

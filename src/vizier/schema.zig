@@ -55,6 +55,7 @@ const create_applied_actions_sql =
     \\    recommendation_id integer,
     \\    applied_at timestamp default current_timestamp,
     \\    sql_text varchar,
+    \\    inverse_sql varchar default '',
     \\    success boolean,
     \\    notes varchar
     \\)
@@ -68,7 +69,20 @@ const create_benchmark_results_sql =
     \\    baseline_ms double,
     \\    candidate_ms double,
     \\    speedup double,
+    \\    plan_before varchar default '',
+    \\    plan_after varchar default '',
     \\    recorded_at timestamp default current_timestamp
+    \\)
+;
+
+const create_replay_results_sql =
+    \\create table if not exists vizier.replay_results (
+    \\    replay_id integer default nextval('vizier.bench_id_seq'),
+    \\    query_signature varchar,
+    \\    sample_sql varchar,
+    \\    avg_ms double,
+    \\    status varchar,
+    \\    replayed_at timestamp default current_timestamp
     \\)
 ;
 
@@ -93,7 +107,16 @@ const insert_default_settings_sql =
     \\  ('min_confidence', '0.4', 'Minimum confidence threshold for recommendations'),
     \\  ('benchmark_runs', '5', 'Default number of benchmark iterations'),
     \\  ('max_pending_captures', '4096', 'Maximum queries in capture buffer'),
-    \\  ('auto_flush', 'false', 'Automatically flush after each capture')
+    \\  ('auto_flush', 'false', 'Automatically flush after each capture'),
+    \\  ('state_path', '', 'Path to auto-save/load state file (empty = disabled)'),
+    \\  ('index_score_divisor', '10', 'Divisor for index advisor score (lower = more sensitive)'),
+    \\  ('sort_score_divisor', '20', 'Divisor for sort advisor score'),
+    \\  ('sort_min_predicates', '2', 'Minimum predicates per column before sort advisor fires'),
+    \\  ('large_table_bytes', '100000000', 'Table size threshold (bytes) for maintenance cost warnings'),
+    \\  ('compare_bench_runs', '5', 'Number of benchmark runs for vizier_compare'),
+    \\  ('cost_weight_time', '1.0', 'Weight for query time impact in scoring (higher = time matters more)'),
+    \\  ('cost_weight_frequency', '1.0', 'Weight for query frequency in scoring (higher = frequency matters more)'),
+    \\  ('cost_weight_selectivity', '1.5', 'Boost for high-selectivity columns (higher = more index-friendly)')
 ;
 
 const create_rec_id_seq_sql =
@@ -296,6 +319,72 @@ const create_analyze_workload_macro_sql =
     \\  order by w.execution_count desc
 ;
 
+const create_explain_human_macro_sql =
+    \\create or replace macro vizier.explain_human(rec_id) as table
+    \\  select
+    \\    r.recommendation_id as id,
+    \\    r.kind,
+    \\    r.table_name,
+    \\    case r.kind
+    \\      when 'create_index' then
+    \\        'Your queries frequently filter ' || r.table_name || ' by ' || r.columns_json
+    \\        || '. Adding an index would let DuckDB find matching rows in O(log n) instead of scanning '
+    \\        || case when coalesce(t.estimated_size, 0) > 0
+    \\          then 'all ' || t.estimated_size::varchar || ' bytes'
+    \\          else 'the entire table'
+    \\        end || '.'
+    \\        || case when r.estimated_gain >= 0.8 then ' Estimated speedup: 10-50x for matching queries.'
+    \\                when r.estimated_gain >= 0.4 then ' Estimated speedup: 2-10x for matching queries.'
+    \\                else ' Estimated speedup: up to 2x for matching queries.'
+    \\        end
+    \\        || case when coalesce(t.estimated_size, 0) > 100000000
+    \\          then ' Write overhead: adds ~3-5% to INSERT/UPDATE operations on this '
+    \\            || (coalesce(t.estimated_size, 0) / 1000000)::bigint || 'MB table.'
+    \\          else ' Write overhead: minimal (small table).'
+    \\        end
+    \\        || case when r.confidence >= 0.9 then ' High confidence.'
+    \\                when r.confidence >= 0.7 then ' Good confidence.'
+    \\                else ' Moderate confidence — verify with a benchmark.'
+    \\        end
+    \\      when 'rewrite_sorted_table' then
+    \\        'Table ' || r.table_name || ' would benefit from being sorted by ' || r.columns_json
+    \\        || '. DuckDB stores data in row groups and can skip entire groups when the sort order matches your filter columns.'
+    \\        || ' This is especially effective for range queries (>=, BETWEEN).'
+    \\        || case when coalesce(t.estimated_size, 0) > 10000000
+    \\          then ' Estimated speedup: 2-20x for range scans on this '
+    \\            || (coalesce(t.estimated_size, 0) / 1000000)::bigint || 'MB table.'
+    \\          else ' Estimated speedup: modest for small tables, significant as data grows.'
+    \\        end
+    \\        || ' Note: this rewrites the entire table and is not reversible.'
+    \\      when 'drop_redundant_index' then
+    \\        'Index ' || r.columns_json || ' on ' || r.table_name
+    \\        || ' is redundant because a wider index already covers the same columns.'
+    \\        || ' Dropping it saves storage and removes ~2% write overhead with no impact on read performance.'
+    \\      when 'parquet_sort_order' then
+    \\        'When exporting ' || r.table_name || ' to Parquet, sorting by ' || r.columns_json
+    \\        || ' will produce row groups with min/max ranges that DuckDB can use to skip irrelevant data during reads.'
+    \\      when 'parquet_partition' then
+    \\        'Partitioning ' || r.table_name || ' by ' || r.columns_json
+    \\        || ' when exporting to Parquet will create separate files per partition value.'
+    \\        || ' This lets DuckDB skip entire files for queries that filter on the partition column.'
+    \\      when 'create_summary_table' then
+    \\        'Your workload repeatedly aggregates ' || r.table_name || ' grouped by ' || r.columns_json
+    \\        || '. A precomputed summary table would serve these queries instantly instead of re-scanning the source data each time.'
+    \\      when 'sort_for_join' then
+    \\        'Sorting ' || r.table_name || ' by ' || r.columns_json
+    \\        || ' would enable merge joins with other tables joined on this column, which can be significantly faster than hash joins for large datasets.'
+    \\      when 'no_action' then
+    \\        'Table ' || r.table_name || ' looks well-optimized for your current workload. No changes recommended.'
+    \\      else r.reason
+    \\    end as explanation,
+    \\    r.sql_text as suggested_sql,
+    \\    round(r.score, 2) as score,
+    \\    round(r.confidence, 2) as confidence
+    \\  from vizier.recommendation_store r
+    \\  left join duckdb_tables() t on r.table_name = t.table_name
+    \\  where r.recommendation_id = rec_id
+;
+
 const create_recommendations_view_sql =
     \\create or replace view vizier.recommendations as
     \\select recommendation_id, kind, table_name, columns_json,
@@ -304,6 +393,63 @@ const create_recommendations_view_sql =
     \\from vizier.recommendation_store
     \\where status = 'pending'
     \\order by score desc
+;
+
+const create_replay_summary_view_sql =
+    \\create or replace view vizier.replay_summary as
+    \\select
+    \\  r.query_signature,
+    \\  r.sample_sql,
+    \\  round(r.avg_ms, 2) as avg_ms,
+    \\  r.status,
+    \\  case
+    \\    when w.avg_time_ms > 0 and r.avg_ms > w.avg_time_ms * 1.2 then 'regression'
+    \\    when w.avg_time_ms > 0 and r.avg_ms < w.avg_time_ms * 0.8 then 'improved'
+    \\    else 'stable'
+    \\  end as verdict,
+    \\  strftime(r.replayed_at, '%Y-%m-%d %H:%M:%S') as replayed_at
+    \\from vizier.replay_results r
+    \\left join vizier.workload_queries w on r.query_signature = w.query_signature
+    \\order by r.avg_ms desc
+;
+
+const create_replay_totals_view_sql =
+    \\create or replace view vizier.replay_totals as
+    \\select
+    \\  count(*) as queries_replayed,
+    \\  round(sum(r.avg_ms), 2) as replay_total_ms,
+    \\  round(coalesce(sum(w.avg_time_ms), 0.0), 2) as baseline_total_ms,
+    \\  case when coalesce(sum(w.avg_time_ms), 0.0) > 0
+    \\    then round(sum(r.avg_ms) / sum(w.avg_time_ms), 2)
+    \\    else null
+    \\  end as ratio,
+    \\  case when coalesce(sum(w.avg_time_ms), 0.0) > 0 and sum(r.avg_ms) < sum(w.avg_time_ms) * 0.9
+    \\    then 'improved'
+    \\    when coalesce(sum(w.avg_time_ms), 0.0) > 0 and sum(r.avg_ms) > sum(w.avg_time_ms) * 1.1
+    \\    then 'regressed'
+    \\    else 'stable'
+    \\  end as overall_verdict,
+    \\  sum(case when r.status = 'error' then 1 else 0 end)::bigint as errors
+    \\from vizier.replay_results r
+    \\left join vizier.workload_queries w on r.query_signature = w.query_signature
+;
+
+const create_change_history_view_sql =
+    \\create or replace view vizier.change_history as
+    \\select
+    \\  a.action_id,
+    \\  a.recommendation_id,
+    \\  r.kind,
+    \\  r.table_name,
+    \\  a.sql_text,
+    \\  a.inverse_sql,
+    \\  a.success,
+    \\  a.notes,
+    \\  strftime(a.applied_at, '%Y-%m-%d %H:%M:%S') as applied_at,
+    \\  case when a.inverse_sql != '' then true else false end as can_rollback
+    \\from vizier.applied_actions a
+    \\join vizier.recommendation_store r on a.recommendation_id = r.recommendation_id
+    \\order by a.action_id desc
 ;
 
 const ddl_statements = [_][*:0]const u8{
@@ -319,6 +465,7 @@ const ddl_statements = [_][*:0]const u8{
     create_recommendation_store_sql,
     create_applied_actions_sql,
     create_benchmark_results_sql,
+    create_replay_results_sql,
     create_workload_summary_view_sql,
     create_inspect_table_macro_sql,
     create_explain_macro_sql,
@@ -327,7 +474,11 @@ const ddl_statements = [_][*:0]const u8{
     create_compare_macro_sql,
     create_analyze_table_macro_sql,
     create_analyze_workload_macro_sql,
+    create_explain_human_macro_sql,
     create_recommendations_view_sql,
+    create_replay_summary_view_sql,
+    create_replay_totals_view_sql,
+    create_change_history_view_sql,
 };
 
 /// Initialize the vizier schema and all metadata tables.

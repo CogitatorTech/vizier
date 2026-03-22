@@ -96,6 +96,8 @@ test "predicate extraction handles joins with aliases" {
     try expectContains(out, "customers");
     try expectContains(out, "country");
     try expectContains(out, "equality");
+    // Both sides of ON clause: o.cid and c.id
+    try expectContains(out, "cid");
 }
 
 test "tables_json and columns_json populated on flush" {
@@ -427,12 +429,60 @@ test "apply_all actually applies when not dry_run" {
     try expectContains(out, "1");
 }
 
+test "rollback reverses an applied index recommendation" {
+    const out = try runSql(testing.allocator,
+        \\create table rb_t (id integer, x integer);
+        \\select * from vizier_capture('select * from rb_t where x = 1');
+        \\select * from vizier_capture('select * from rb_t where x = 2');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select * from vizier_apply(1);
+        \\select status from vizier.recommendation_store where recommendation_id = 1;
+        \\select * from vizier_rollback(1);
+        \\select status from vizier.recommendation_store where recommendation_id = 1;
+        \\select can_rollback from vizier.change_history where action_id = 1;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "applied");
+    try expectContains(out, "rolled back");
+    try expectContains(out, "pending");
+    try expectContains(out, "drop index");
+}
+
+test "rollback_all reverses all applied recommendations" {
+    const out = try runSql(testing.allocator,
+        \\create table rba_t (id integer, x integer, y integer);
+        \\select * from vizier_capture('select * from rba_t where x = 1');
+        \\select * from vizier_capture('select * from rba_t where y = 2');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select * from vizier_apply_all(min_score => 0.0, max_actions => 10);
+        \\select count(*) from vizier.applied_actions where success = true;
+        \\select * from vizier_rollback_all();
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+}
+
 test "apply non-existent recommendation returns not found" {
     const out = try runSql(testing.allocator,
         \\select * from vizier_apply(9999);
     );
     defer testing.allocator.free(out);
     try expectContains(out, "not found");
+}
+
+test "explain_human gives natural language explanation" {
+    const out = try runSql(testing.allocator,
+        \\select * from vizier_capture('select * from nlp_t where x = 1');
+        \\select * from vizier_capture('select * from nlp_t where x = 2');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select explanation from vizier.explain_human(1);
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "queries frequently filter");
+    try expectContains(out, "Adding an index");
 }
 
 test "analyze_table shows recommendations for a specific table" {
@@ -498,6 +548,31 @@ test "compare benchmarks before and after applying recommendation" {
     defer testing.allocator.free(out);
     try expectContains(out, "ok");
     try expectContains(out, "1");
+}
+
+test "report generates HTML file" {
+    const out = try runSql(testing.allocator,
+        \\select * from vizier_capture('select * from rpt_t where x = 1');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select * from vizier_report('/tmp/vizier_test_report.html');
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+}
+
+test "replay re-runs captured queries and stores results" {
+    const out = try runSql(testing.allocator,
+        \\create table replay_t as select i as id, i % 50 as x from range(1000) t(i);
+        \\select * from vizier_capture('select * from replay_t where x = 1');
+        \\select * from vizier_capture('select count(*) from replay_t');
+        \\select * from vizier_flush();
+        \\select * from vizier_replay();
+        \\select count(*) from vizier.replay_results;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+    try expectContains(out, "2");
 }
 
 test "benchmark runs a query and returns timing stats" {
@@ -667,6 +742,62 @@ test "workload_queries has p95_time_ms column" {
     );
     defer testing.allocator.free(out);
     try expectContains(out, "0");
+}
+
+test "analyze populates avg_selectivity for predicates" {
+    const out = try runSql(testing.allocator,
+        \\create table sel_t as select i as id, i % 10 as category from range(1000) t(i);
+        \\select * from vizier_capture('select * from sel_t where category = 1');
+        \\select * from vizier_capture('select * from sel_t where id = 42');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select column_name, round(avg_selectivity, 4) as sel from vizier.workload_predicates where table_name = 'sel_t' order by column_name;
+    );
+    defer testing.allocator.free(out);
+    // category has ~10 distinct values out of 1000 rows → selectivity ~0.01
+    // id has ~1000 distinct values → selectivity ~1.0
+    try expectContains(out, "category");
+    try expectContains(out, "id");
+    try expectContains(out, "0.");
+}
+
+test "save and load persist state across sessions" {
+    // Save state with captured queries
+    const out = try runSql(testing.allocator,
+        \\select * from vizier_capture('select * from persist_t where x = 1');
+        \\select * from vizier_flush();
+        \\select * from vizier_save('/tmp/vizier_test_state.db');
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+
+    // Load into a fresh session — queries should survive
+    const out2 = try runSql(testing.allocator,
+        \\select * from vizier_load('/tmp/vizier_test_state.db');
+        \\select count(*) from vizier.workload_queries;
+    );
+    defer testing.allocator.free(out2);
+    try expectContains(out2, "ok");
+    try expectContains(out2, "1");
+}
+
+test "auto-save persists state on flush when state_path configured" {
+    // Configure state_path, capture, flush (should auto-save), then load in new session
+    const out = try runSql(testing.allocator,
+        \\select vizier_configure('state_path', '/tmp/vizier_autosave_test.db');
+        \\select * from vizier_capture('select * from autosave_t where x = 1');
+        \\select * from vizier_flush();
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+
+    const out2 = try runSql(testing.allocator,
+        \\select * from vizier_load('/tmp/vizier_autosave_test.db');
+        \\select count(*) from vizier.workload_queries;
+    );
+    defer testing.allocator.free(out2);
+    try expectContains(out2, "ok");
+    try expectContains(out2, "1");
 }
 
 test "no_action emitted for tables with no actionable recommendations" {

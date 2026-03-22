@@ -31,7 +31,7 @@ Priorities, in order:
 - `src/duckdb.zig`: Auto-generated DuckDB C API bindings (do not edit manually).
 - `src/vizier/schema.zig`: DDL for metadata tables and views.
 - `src/vizier/capture.zig`: Query hashing and INSERT SQL building.
-- `src/vizier/extract.zig`: Heuristic SQL tokenizer and predicate/table extractor (pure Zig, no DB deps).
+- `src/vizier/extract.zig`: Heuristic SQL tokenizer and predicate/table extractor (pure Zig, no DB deps). Captures both sides of JOIN conditions.
 - `src/vizier/sql_runner.zig`: Connect/query/disconnect wrapper using `duckdb_ext_api`. Also `runOnConn()` for reusing an existing connection.
 - `src/vizier/inspect.zig`: Table reference parsing (pure Zig). The `inspect_table` macro is defined in `schema.zig`.
 - `src/vizier/advisor.zig`: All advisor SQL queries (index, sort, redundant index, parquet layout, summary table, join-path, no-action),
@@ -39,6 +39,8 @@ Priorities, in order:
 - `src/vizier/summary.zig`: Workload summary view SQL definition.
 - `tests/property_tests.zig`: Property-based tests (using the Minish framework).
 - `tests/integration_tests.zig`: Integration tests that spawn DuckDB and validate output.
+- `tests/sql/`: Standalone SQL test files runnable with `duckdb -unsigned -c ".read file.sql"`.
+- `benches/`: SQL-based benchmarks with timing metrics. Run via `make bench` or `./benches/run.sh`.
 - `scripts/`: Build tooling (metadata appender script).
 - `build.zig` / `build.zig.zon`: Zig build configuration and dependencies.
 - `Makefile`: GNU Make wrapper around `zig build`.

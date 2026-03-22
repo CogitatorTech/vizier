@@ -91,11 +91,128 @@ This document outlines the features implemented in Vizier and the future goals f
 - [x] `p95_time_ms` in `workload_queries`
 - [x] `avg_selectivity` in `workload_predicates`
 
+### Extractor
+
+- [x] Both sides of JOIN conditions extracted (e.g., `on a.x = b.y` captures both `a.x` and `b.y`)
+
+### Settings-Driven Configuration
+
+- [x] Index advisor reads `index_score_divisor` and `large_table_bytes` from `vizier.settings`
+- [x] Sort advisor reads `sort_score_divisor` and `sort_min_predicates` from `vizier.settings`
+
+### Selectivity Estimation
+
+- [x] `vizier_analyze()` computes `approx_count_distinct / count(*)` per (table, column)
+- [x] Results stored in `workload_predicates.avg_selectivity`
+
+### Query Plan Comparison
+
+- [x] `vizier_compare(id)` captures EXPLAIN plans before and after applying a recommendation
+- [x] Plans stored in `benchmark_results.plan_before` and `benchmark_results.plan_after`
+
 ### Development and Testing
 
 - [x] Unit and regression tests
 - [x] Property-based tests
 - [x] Integration tests
-- [x] Cross-platform build support
+- [x] Standalone SQL tests (`tests/sql/`, `make test-sql`)
+- [x] SQL-based benchmarks (`benches/`, `make bench`)
+- [x] Cross-platform build support (Linux, macOS, Windows, FreeBSD)
+- [x] CI pipeline with DuckDB integration tests and 9-platform cross-compile
 - [x] End-to-end test suite with sample workloads
-- [x] Benchmarks against real-world datasets
+- [x] Benchmarks against real-world datasets (TPC-H-like)
+
+---
+
+## v3 Roadmap
+
+> Features that would make Vizier 10x more useful for real-world adoption.
+
+### Persistent State
+
+Vizier state is currently in-memory and lost when DuckDB exits. Persistence makes Vizier
+usable for real workloads where query patterns accumulate over days/weeks.
+
+- [x] `vizier_init(path)` — initialize Vizier with a persistent state file (sets state_path + loads)
+- [x] Auto-load state on extension init if `state_path` setting is configured
+- [x] Auto-save metadata tables on `vizier_flush()` when `state_path` configured
+- [x] `vizier_export(path)` — export full Vizier state (workload + recommendations + actions) to a file
+- [x] `vizier_import(path)` — import state from another environment (dev → staging → prod analysis)
+- [ ] Attach-based persistence using `ATTACH ':vizier_state:' AS vizier` to a file-backed database
+
+### Automatic Query Capture
+
+Manual `vizier_capture()` per query is too much friction. Automatic capture makes Vizier
+zero-effort to adopt.
+
+- [ ] Profiling-based capture: `vizier_start_capture()` enables `PRAGMA enable_profiling` and polls the profiling output file on a timer
+- [ ] Capture execution time from profiling data (`total_time_ms`, `p95_time_ms` populated from real measurements)
+- [ ] Capture rows scanned and memory usage from profiling output when available
+- [ ] Proxy mode: lightweight TCP proxy that intercepts queries to DuckDB, captures them, and forwards to the real instance
+- [ ] Hook into DuckDB's `query_log` table (if/when DuckDB exposes it via extension API)
+
+### Cost-Based Scoring
+
+Replace heuristic frequency-based scoring with cost-aware scoring that factors in actual
+query performance, not just how often a query runs.
+
+- [x] Weight recommendations by `total_time_ms * execution_count` (total CPU impact) instead of frequency alone
+- [ ] Use `EXPLAIN` cost estimates to predict improvement before applying
+- [ ] Factor in estimated rows scanned from EXPLAIN output
+- [ ] Compare optimizer cost before vs after for each recommendation
+- [x] Configurable scoring weights via `vizier.settings` (`cost_weight_time`, `cost_weight_frequency`, `cost_weight_selectivity`)
+
+### Web Dashboard
+
+A single-page web UI that makes Vizier accessible to non-SQL users and provides
+visual insight into workload patterns and recommendations.
+
+- [ ] Embedded HTTP server in the extension (or standalone `vizier-dashboard` binary)
+- [ ] Workload heatmap: tables and columns colored by query frequency and time spent
+- [ ] Recommendation list with score bars, one-click apply, dry-run preview
+- [ ] Before/after plan diff viewer (side-by-side EXPLAIN comparison)
+- [ ] Timeline view: applied changes and their measured impact over time
+- [ ] Physical design overview: tables, indexes, sizes, predicate coverage
+- [x] Export dashboard state as static HTML report via `vizier_report(path)`
+
+### Workload Replay and Regression Testing
+
+After applying a recommendation, automatically validate that the entire workload
+improved (not just the target query).
+
+- [x] `vizier_replay()` — re-run all captured queries and collect timing
+- [x] `vizier_replay(table_name => 'x')` — replay only queries that touch a specific table
+- [x] Compare total workload time before vs after via `vizier.replay_totals` view
+- [x] Detect regressions via `vizier.replay_summary` view (compares replay timing vs stored avg_time_ms)
+- [x] Store replay results in `vizier.replay_results` table with per-query breakdown
+
+### Schema Change Tracking with Rollback
+
+Make `vizier_apply()` reversible so users feel safe applying recommendations in production.
+
+- [x] Store inverse operation for each applied recommendation (e.g., `DROP INDEX` for `CREATE INDEX`)
+- [x] `vizier_rollback(id)` — execute the inverse and mark the recommendation as rolled back
+- [x] `vizier.change_history` view showing all applied changes with timestamps and rollback availability
+- [x] Warn before applying irreversible recommendations (status returns "applied (irreversible)")
+- [x] `vizier_rollback_all()` — undo all applied recommendations in reverse order
+
+### Natural Language Explanations
+
+Replace terse technical reasons with clear, actionable explanations that non-expert
+users can understand and act on.
+
+- [x] Template-based explanation generator that uses table size, query frequency, and selectivity to produce human-readable text
+- [x] Include estimated speedup range (e.g., "10-50x faster") based on selectivity and table size
+- [x] Include write overhead estimate in plain language (e.g., "adds ~3-5% to INSERT operations")
+- [x] `vizier.explain_human(id)` macro that returns the natural language explanation
+- [ ] Optionally integrate with LLM API for richer explanations (configurable, opt-in)
+
+### IDE Integration
+
+Bring Vizier recommendations directly into the developer's editor.
+
+- [ ] VS Code extension: sidebar panel showing recommendations for the current project
+- [ ] Inline diagnostics: warning squiggles on queries that would benefit from an index
+- [ ] Code actions: "Create recommended index" as a quick fix
+- [ ] JetBrains plugin (DataGrip, CLion): same features via the DuckDB JDBC driver
+- [ ] LSP-based protocol so any editor can integrate

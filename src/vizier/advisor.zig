@@ -13,11 +13,18 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\  'create_index',
     \\  p.table_name,
     \\  '["' || p.column_name || '"]',
-    \\  least((p.freq + p.point_lookups + p.join_hits)::double / 10.0, 1.0)
+    \\  least((p.freq + p.point_lookups + p.join_hits)::double
+    \\    / (select value::double from vizier.settings where key = 'index_score_divisor'), 1.0)
     \\    * case
-    \\      when coalesce(t.estimated_size, 0) > 1000000000 then 0.7
-    \\      when coalesce(t.estimated_size, 0) > 100000000 then 0.85
+    \\      when coalesce(t.estimated_size, 0) > (select value::bigint from vizier.settings where key = 'large_table_bytes') * 10 then 0.7
+    \\      when coalesce(t.estimated_size, 0) > (select value::bigint from vizier.settings where key = 'large_table_bytes') then 0.85
     \\      else 1.0
+    \\    end
+    \\    * (1.0 + least(coalesce(p.total_impact, 0.0) / 1000.0, 1.0))
+    \\    * case when coalesce(p.min_selectivity, 1.0) < 0.01
+    \\        then (select value::double from vizier.settings where key = 'cost_weight_selectivity')
+    \\           when coalesce(p.min_selectivity, 1.0) < 0.1 then 1.2
+    \\           else 1.0
     \\    end,
     \\  case
     \\    when p.point_lookups > 0 then 0.95
@@ -41,7 +48,9 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\    sub.column_name,
     \\    count(*) as freq,
     \\    sum(case when sub.is_point_lookup then 1 else 0 end) as point_lookups,
-    \\    sum(case when sub.is_join then 1 else 0 end) as join_hits
+    \\    sum(case when sub.is_join then 1 else 0 end) as join_hits,
+    \\    sum(coalesce(sub.query_impact, 0.0)) as total_impact,
+    \\    min(coalesce(sub.avg_selectivity, 1.0)) as min_selectivity
     \\  from (
     \\    select p1.*,
     \\      (select count(*) from vizier.workload_predicates p2
@@ -50,7 +59,10 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\      ) = 1 as is_point_lookup,
     \\      (select w.tables_json from vizier.workload_queries w
     \\        where w.query_signature = p1.query_signature
-    \\      ) like '%,%' as is_join
+    \\      ) like '%,%' as is_join,
+    \\      (select w.total_time_ms * w.execution_count from vizier.workload_queries w
+    \\        where w.query_signature = p1.query_signature
+    \\      ) as query_impact
     \\    from vizier.workload_predicates p1
     \\    where p1.predicate_kind in ('equality', 'in_list')
     \\  ) sub
@@ -77,7 +89,7 @@ pub const sort_advisor_sql: [*:0]const u8 =
     \\  'rewrite_sorted_table',
     \\  p.table_name,
     \\  '[' || string_agg('"' || p.column_name || '"', ',' order by p.freq desc) || ']',
-    \\  least(sum(p.freq)::double / 20.0, 1.0)
+    \\  least(sum(p.freq)::double / (select value::double from vizier.settings where key = 'sort_score_divisor'), 1.0)
     \\    * case
     \\      when coalesce(max(t.estimated_size), 0) > 10000000 then 1.2
     \\      when coalesce(max(t.estimated_size), 0) > 1000000 then 1.1
@@ -106,7 +118,7 @@ pub const sort_advisor_sql: [*:0]const u8 =
     \\  from vizier.workload_predicates
     \\  where predicate_kind in ('equality', 'range')
     \\  group by table_name, column_name
-    \\  having count(*) >= 2
+    \\  having count(*) >= (select value::integer from vizier.settings where key = 'sort_min_predicates')
     \\) p
     \\left join duckdb_tables() t on p.table_name = t.table_name
     \\where not exists (

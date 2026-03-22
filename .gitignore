@@ -109,3 +109,4 @@ latest
 duckdb
 NOTES.md
 .claude/
+*.parquet

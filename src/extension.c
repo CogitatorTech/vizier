@@ -109,6 +109,18 @@ static bool add_pending_capture(const char *sql, char sig_out[SIG_LEN]) {
   return true;
 }
 
+// Tables to persist (order matters for FK-like dependencies)
+static const char *vizier_persist_tables[] = {
+    "workload_queries", "workload_predicates", "recommendation_store",
+    "applied_actions",  "benchmark_results",   "settings",
+    "session_log",      "replay_results",
+};
+#define NUM_PERSIST_TABLES                                                     \
+  (sizeof(vizier_persist_tables) / sizeof(vizier_persist_tables[0]))
+
+// Forward declarations
+static void auto_save_if_configured(void);
+
 // Flush all pending captures to the database using the persistent connection.
 static bool flush_pending(void) {
   if (g_pending_count == 0 || !g_flush_conn)
@@ -143,7 +155,74 @@ static bool flush_pending(void) {
   }
 
   g_pending_count = 0;
+  if (all_ok)
+    auto_save_if_configured();
   return all_ok;
+}
+
+// Auto-save state if state_path is configured in vizier.settings.
+static void auto_save_if_configured(void) {
+  if (!g_flush_conn)
+    return;
+  duckdb_result result;
+  memset(&result, 0, sizeof(result));
+  if (duckdb_query(g_flush_conn,
+                   "select value::varchar from vizier.settings "
+                   "where key = 'state_path' and value != ''",
+                   &result) != DuckDBSuccess) {
+    duckdb_destroy_result(&result);
+    return;
+  }
+  duckdb_data_chunk chunk = duckdb_fetch_chunk(result);
+  if (!chunk || duckdb_data_chunk_get_size(chunk) == 0) {
+    if (chunk)
+      duckdb_destroy_data_chunk(&chunk);
+    duckdb_destroy_result(&result);
+    return;
+  }
+  duckdb_vector vec = duckdb_data_chunk_get_vector(chunk, 0);
+  duckdb_string_t *data = (duckdb_string_t *)duckdb_vector_get_data(vec);
+  uint32_t len = duckdb_string_t_length(data[0]);
+  const char *ptr = duckdb_string_t_data(&data[0]);
+
+  // Run save logic inline
+  char path_buf[512];
+  size_t cl = len < sizeof(path_buf) - 1 ? len : sizeof(path_buf) - 1;
+  memcpy(path_buf, ptr, cl);
+  path_buf[cl] = '\0';
+  duckdb_destroy_data_chunk(&chunk);
+  duckdb_destroy_result(&result);
+
+  char *esc_path = escape_sql_str(path_buf);
+  char buf[1024];
+  snprintf(buf, sizeof(buf), "attach '%s' as _vstate", esc_path);
+  memset(&result, 0, sizeof(result));
+  if (duckdb_query(g_flush_conn, buf, &result) != DuckDBSuccess) {
+    duckdb_destroy_result(&result);
+    free(esc_path);
+    return;
+  }
+  duckdb_destroy_result(&result);
+
+  memset(&result, 0, sizeof(result));
+  duckdb_query(g_flush_conn, "create schema if not exists _vstate.vizier",
+               &result);
+  duckdb_destroy_result(&result);
+
+  for (size_t i = 0; i < NUM_PERSIST_TABLES; i++) {
+    snprintf(buf, sizeof(buf),
+             "create or replace table _vstate.vizier.%s as "
+             "select * from vizier.%s",
+             vizier_persist_tables[i], vizier_persist_tables[i]);
+    memset(&result, 0, sizeof(result));
+    duckdb_query(g_flush_conn, buf, &result);
+    duckdb_destroy_result(&result);
+  }
+
+  memset(&result, 0, sizeof(result));
+  duckdb_query(g_flush_conn, "detach _vstate", &result);
+  duckdb_destroy_result(&result);
+  free(esc_path);
 }
 
 // ============================================================================
@@ -197,6 +276,343 @@ static void vizier_configure_func(duckdb_function_info info,
     duckdb_vector_assign_string_element_len(output, i, result_str,
                                             strlen(result_str));
   }
+}
+
+// ============================================================================
+// vizier_init(path) — set state_path and load existing state if file exists
+// ============================================================================
+
+typedef struct {
+  char status[64];
+  bool loaded;
+} InitBindData;
+
+static void init_state_bind(duckdb_bind_info info) {
+  duckdb_logical_type varchar_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+  duckdb_bind_add_result_column(info, "status", varchar_type);
+  duckdb_bind_add_result_column(info, "message", varchar_type);
+  duckdb_destroy_logical_type(&varchar_type);
+
+  duckdb_value param = duckdb_bind_get_parameter(info, 0);
+  char *file_path = duckdb_get_varchar(param);
+  duckdb_destroy_value(&param);
+
+  InitBindData *bd = (InitBindData *)malloc(sizeof(InitBindData));
+  strncpy(bd->status, "error", sizeof(bd->status));
+  bd->loaded = false;
+
+  if (g_flush_conn && file_path) {
+    // Set state_path in settings
+    char *esc = escape_sql_str(file_path);
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+             "update vizier.settings set value = '%s' "
+             "where key = 'state_path'",
+             esc);
+    duckdb_result result;
+    memset(&result, 0, sizeof(result));
+    duckdb_query(g_flush_conn, buf, &result);
+    duckdb_destroy_result(&result);
+
+    // Try to load existing state
+    snprintf(buf, sizeof(buf), "attach '%s' as _vstate (read_only)", esc);
+    memset(&result, 0, sizeof(result));
+    if (duckdb_query(g_flush_conn, buf, &result) == DuckDBSuccess) {
+      for (size_t i = 0; i < NUM_PERSIST_TABLES; i++) {
+        // Check if table exists
+        char chk[256];
+        snprintf(chk, sizeof(chk),
+                 "select 1 from duckdb_tables() where database_name = "
+                 "'_vstate' and schema_name = 'vizier' and table_name = '%s'",
+                 vizier_persist_tables[i]);
+        duckdb_result cr;
+        memset(&cr, 0, sizeof(cr));
+        if (duckdb_query(g_flush_conn, chk, &cr) == DuckDBSuccess) {
+          duckdb_data_chunk ck = duckdb_fetch_chunk(cr);
+          bool exists = ck && duckdb_data_chunk_get_size(ck) > 0;
+          if (ck)
+            duckdb_destroy_data_chunk(&ck);
+          if (exists) {
+            snprintf(buf, sizeof(buf), "delete from vizier.%s",
+                     vizier_persist_tables[i]);
+            duckdb_result dr;
+            memset(&dr, 0, sizeof(dr));
+            duckdb_query(g_flush_conn, buf, &dr);
+            duckdb_destroy_result(&dr);
+
+            snprintf(buf, sizeof(buf),
+                     "insert into vizier.%s select * from _vstate.vizier.%s",
+                     vizier_persist_tables[i], vizier_persist_tables[i]);
+            memset(&dr, 0, sizeof(dr));
+            duckdb_query(g_flush_conn, buf, &dr);
+            duckdb_destroy_result(&dr);
+          }
+        }
+        duckdb_destroy_result(&cr);
+      }
+      duckdb_result dr;
+      memset(&dr, 0, sizeof(dr));
+      duckdb_query(g_flush_conn, "detach _vstate", &dr);
+      duckdb_destroy_result(&dr);
+      bd->loaded = true;
+    }
+    duckdb_destroy_result(&result);
+    free(esc);
+
+    strncpy(bd->status, "ok", sizeof(bd->status));
+  }
+
+  duckdb_free(file_path);
+  duckdb_bind_set_bind_data(info, bd, free);
+  duckdb_bind_set_cardinality(info, 1, true);
+}
+
+static void init_state_execute(duckdb_function_info info,
+                               duckdb_data_chunk output) {
+  struct {
+    bool done;
+  } *init_data = duckdb_function_get_init_data(info);
+  if (init_data->done) {
+    duckdb_data_chunk_set_size(output, 0);
+    return;
+  }
+  InitBindData *bd = (InitBindData *)duckdb_function_get_bind_data(info);
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 0), 0, bd->status,
+      strlen(bd->status));
+  const char *msg =
+      bd->loaded ? "State loaded from file" : "Initialized (no existing state)";
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 1), 0, msg, strlen(msg));
+  duckdb_data_chunk_set_size(output, 1);
+  init_data->done = true;
+}
+
+// ============================================================================
+// vizier_save(path) / vizier_load(path) table functions
+// Persist and restore Vizier state to/from a DuckDB file.
+// ============================================================================
+
+typedef struct {
+  char status[64];
+  int64_t tables_saved;
+  bool success;
+} SaveBindData;
+
+typedef struct {
+  bool done;
+} SaveInitData;
+
+static void save_bind(duckdb_bind_info info) {
+  duckdb_logical_type varchar_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+  duckdb_logical_type bigint_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+  duckdb_bind_add_result_column(info, "status", varchar_type);
+  duckdb_bind_add_result_column(info, "tables_saved", bigint_type);
+  duckdb_destroy_logical_type(&varchar_type);
+  duckdb_destroy_logical_type(&bigint_type);
+
+  duckdb_value param = duckdb_bind_get_parameter(info, 0);
+  char *file_path = duckdb_get_varchar(param);
+  duckdb_destroy_value(&param);
+
+  SaveBindData *bind_data = (SaveBindData *)malloc(sizeof(SaveBindData));
+  strncpy(bind_data->status, "error", sizeof(bind_data->status));
+  bind_data->tables_saved = 0;
+  bind_data->success = false;
+
+  if (g_flush_conn && file_path) {
+    char *esc_path = escape_sql_str(file_path);
+    char buf[1024];
+    duckdb_result result;
+
+    // Attach target file (overwrite if exists)
+    snprintf(buf, sizeof(buf), "attach '%s' as _vstate", esc_path);
+    memset(&result, 0, sizeof(result));
+    if (duckdb_query(g_flush_conn, buf, &result) != DuckDBSuccess) {
+      duckdb_destroy_result(&result);
+      free(esc_path);
+      goto save_done;
+    }
+    duckdb_destroy_result(&result);
+
+    // Create schema in attached db
+    memset(&result, 0, sizeof(result));
+    duckdb_query(g_flush_conn, "create schema if not exists _vstate.vizier",
+                 &result);
+    duckdb_destroy_result(&result);
+
+    // Copy each table
+    int64_t saved = 0;
+    for (size_t i = 0; i < NUM_PERSIST_TABLES; i++) {
+      snprintf(buf, sizeof(buf),
+               "create or replace table _vstate.vizier.%s as "
+               "select * from vizier.%s",
+               vizier_persist_tables[i], vizier_persist_tables[i]);
+      memset(&result, 0, sizeof(result));
+      if (duckdb_query(g_flush_conn, buf, &result) == DuckDBSuccess)
+        saved++;
+      duckdb_destroy_result(&result);
+    }
+
+    // Detach
+    memset(&result, 0, sizeof(result));
+    duckdb_query(g_flush_conn, "detach _vstate", &result);
+    duckdb_destroy_result(&result);
+
+    free(esc_path);
+    bind_data->tables_saved = saved;
+    bind_data->success = (saved == NUM_PERSIST_TABLES);
+    strncpy(bind_data->status, saved == NUM_PERSIST_TABLES ? "ok" : "partial",
+            sizeof(bind_data->status));
+  }
+
+save_done:
+  duckdb_free(file_path);
+  duckdb_bind_set_bind_data(info, bind_data, free);
+  duckdb_bind_set_cardinality(info, 1, true);
+}
+
+typedef struct {
+  char status[64];
+  int64_t tables_loaded;
+  bool success;
+} LoadBindData;
+
+static void load_bind(duckdb_bind_info info) {
+  duckdb_logical_type varchar_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+  duckdb_logical_type bigint_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+  duckdb_bind_add_result_column(info, "status", varchar_type);
+  duckdb_bind_add_result_column(info, "tables_loaded", bigint_type);
+  duckdb_destroy_logical_type(&varchar_type);
+  duckdb_destroy_logical_type(&bigint_type);
+
+  duckdb_value param = duckdb_bind_get_parameter(info, 0);
+  char *file_path = duckdb_get_varchar(param);
+  duckdb_destroy_value(&param);
+
+  LoadBindData *bind_data = (LoadBindData *)malloc(sizeof(LoadBindData));
+  strncpy(bind_data->status, "error", sizeof(bind_data->status));
+  bind_data->tables_loaded = 0;
+  bind_data->success = false;
+
+  if (g_flush_conn && file_path) {
+    char *esc_path = escape_sql_str(file_path);
+    char buf[1024];
+    duckdb_result result;
+
+    // Attach source file as read-only
+    snprintf(buf, sizeof(buf), "attach '%s' as _vstate (read_only)", esc_path);
+    memset(&result, 0, sizeof(result));
+    if (duckdb_query(g_flush_conn, buf, &result) != DuckDBSuccess) {
+      duckdb_destroy_result(&result);
+      free(esc_path);
+      goto load_done;
+    }
+    duckdb_destroy_result(&result);
+
+    // Load each table: delete existing rows, insert from attached db
+    int64_t loaded = 0;
+    for (size_t i = 0; i < NUM_PERSIST_TABLES; i++) {
+      // Check if table exists in the attached db
+      snprintf(buf, sizeof(buf),
+               "select 1 from duckdb_tables() "
+               "where database_name = '_vstate' and schema_name = 'vizier' "
+               "and table_name = '%s'",
+               vizier_persist_tables[i]);
+      memset(&result, 0, sizeof(result));
+      if (duckdb_query(g_flush_conn, buf, &result) == DuckDBSuccess) {
+        duckdb_data_chunk chunk = duckdb_fetch_chunk(result);
+        bool exists = chunk && duckdb_data_chunk_get_size(chunk) > 0;
+        if (chunk)
+          duckdb_destroy_data_chunk(&chunk);
+        duckdb_destroy_result(&result);
+
+        if (exists) {
+          // Delete existing data
+          snprintf(buf, sizeof(buf), "delete from vizier.%s",
+                   vizier_persist_tables[i]);
+          memset(&result, 0, sizeof(result));
+          duckdb_query(g_flush_conn, buf, &result);
+          duckdb_destroy_result(&result);
+
+          // Insert from attached db
+          snprintf(buf, sizeof(buf),
+                   "insert into vizier.%s select * from _vstate.vizier.%s",
+                   vizier_persist_tables[i], vizier_persist_tables[i]);
+          memset(&result, 0, sizeof(result));
+          if (duckdb_query(g_flush_conn, buf, &result) == DuckDBSuccess)
+            loaded++;
+          duckdb_destroy_result(&result);
+        }
+      } else {
+        duckdb_destroy_result(&result);
+      }
+    }
+
+    // Detach
+    memset(&result, 0, sizeof(result));
+    duckdb_query(g_flush_conn, "detach _vstate", &result);
+    duckdb_destroy_result(&result);
+
+    free(esc_path);
+    bind_data->tables_loaded = loaded;
+    bind_data->success = true;
+    strncpy(bind_data->status, "ok", sizeof(bind_data->status));
+  }
+
+load_done:
+  duckdb_free(file_path);
+  duckdb_bind_set_bind_data(info, bind_data, free);
+  duckdb_bind_set_cardinality(info, 1, true);
+}
+
+static void save_init(duckdb_init_info info) {
+  SaveInitData *d = (SaveInitData *)malloc(sizeof(SaveInitData));
+  d->done = false;
+  duckdb_init_set_init_data(info, d, free);
+}
+
+static void save_execute(duckdb_function_info info, duckdb_data_chunk output) {
+  SaveInitData *d = (SaveInitData *)duckdb_function_get_init_data(info);
+  if (d->done) {
+    duckdb_data_chunk_set_size(output, 0);
+    return;
+  }
+  SaveBindData *bd = (SaveBindData *)duckdb_function_get_bind_data(info);
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 0), 0, bd->status,
+      strlen(bd->status));
+  ((int64_t *)duckdb_vector_get_data(
+      duckdb_data_chunk_get_vector(output, 1)))[0] = bd->tables_saved;
+  duckdb_data_chunk_set_size(output, 1);
+  d->done = true;
+}
+
+static void load_init(duckdb_init_info info) {
+  SaveInitData *d = (SaveInitData *)malloc(sizeof(SaveInitData));
+  d->done = false;
+  duckdb_init_set_init_data(info, d, free);
+}
+
+static void load_execute(duckdb_function_info info, duckdb_data_chunk output) {
+  SaveInitData *d = (SaveInitData *)duckdb_function_get_init_data(info);
+  if (d->done) {
+    duckdb_data_chunk_set_size(output, 0);
+    return;
+  }
+  LoadBindData *bd = (LoadBindData *)duckdb_function_get_bind_data(info);
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 0), 0, bd->status,
+      strlen(bd->status));
+  ((int64_t *)duckdb_vector_get_data(
+      duckdb_data_chunk_get_vector(output, 1)))[0] = bd->tables_loaded;
+  duckdb_data_chunk_set_size(output, 1);
+  d->done = true;
 }
 
 // ============================================================================
@@ -332,6 +748,278 @@ static void flush_execute(duckdb_function_info info, duckdb_data_chunk output) {
                                           strlen(status));
   ((int64_t *)duckdb_vector_get_data(count_vec))[0] = bind_data->flushed_count;
 
+  duckdb_data_chunk_set_size(output, 1);
+  init_data->done = true;
+}
+
+// ============================================================================
+// vizier_rollback(action_id) table function
+// Executes the inverse SQL for a previously applied recommendation.
+// ============================================================================
+
+typedef struct {
+  char status[64];
+  char inverse_sql[4096];
+} RollbackBindData;
+
+static void rollback_bind(duckdb_bind_info info) {
+  duckdb_logical_type varchar_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+  duckdb_bind_add_result_column(info, "status", varchar_type);
+  duckdb_bind_add_result_column(info, "inverse_sql", varchar_type);
+  duckdb_destroy_logical_type(&varchar_type);
+
+  duckdb_value param = duckdb_bind_get_parameter(info, 0);
+  int64_t action_id = duckdb_get_int64(param);
+  duckdb_destroy_value(&param);
+
+  RollbackBindData *bind_data =
+      (RollbackBindData *)malloc(sizeof(RollbackBindData));
+  strncpy(bind_data->status, "error", sizeof(bind_data->status));
+  bind_data->inverse_sql[0] = '\0';
+
+  if (!g_flush_conn)
+    goto rollback_done;
+
+  {
+    // Fetch inverse SQL and recommendation_id for this action
+    char fetch_buf[256];
+    snprintf(fetch_buf, sizeof(fetch_buf),
+             "select inverse_sql::varchar, recommendation_id::bigint "
+             "from vizier.applied_actions "
+             "where action_id = %lld and success = true",
+             (long long)action_id);
+
+    duckdb_result result;
+    memset(&result, 0, sizeof(result));
+    if (duckdb_query(g_flush_conn, fetch_buf, &result) != DuckDBSuccess) {
+      duckdb_destroy_result(&result);
+      goto rollback_done;
+    }
+
+    duckdb_data_chunk chunk = duckdb_fetch_chunk(result);
+    if (!chunk || duckdb_data_chunk_get_size(chunk) == 0) {
+      if (chunk)
+        duckdb_destroy_data_chunk(&chunk);
+      duckdb_destroy_result(&result);
+      strncpy(bind_data->status, "not found", sizeof(bind_data->status));
+      goto rollback_done;
+    }
+
+    duckdb_vector inv_vec = duckdb_data_chunk_get_vector(chunk, 0);
+    duckdb_string_t *inv_data =
+        (duckdb_string_t *)duckdb_vector_get_data(inv_vec);
+    uint32_t inv_len = duckdb_string_t_length(inv_data[0]);
+    const char *inv_ptr = duckdb_string_t_data(&inv_data[0]);
+
+    duckdb_vector rid_vec = duckdb_data_chunk_get_vector(chunk, 1);
+    int64_t rec_id = ((int64_t *)duckdb_vector_get_data(rid_vec))[0];
+
+    if (inv_len == 0) {
+      duckdb_destroy_data_chunk(&chunk);
+      duckdb_destroy_result(&result);
+      strncpy(bind_data->status, "not reversible", sizeof(bind_data->status));
+      goto rollback_done;
+    }
+
+    size_t copy = inv_len < sizeof(bind_data->inverse_sql) - 1
+                      ? inv_len
+                      : sizeof(bind_data->inverse_sql) - 1;
+    memcpy(bind_data->inverse_sql, inv_ptr, copy);
+    bind_data->inverse_sql[copy] = '\0';
+    duckdb_destroy_data_chunk(&chunk);
+    duckdb_destroy_result(&result);
+
+    // Execute inverse SQL
+    duckdb_result rb_result;
+    memset(&rb_result, 0, sizeof(rb_result));
+    bool rolled_back = duckdb_query(g_flush_conn, bind_data->inverse_sql,
+                                    &rb_result) == DuckDBSuccess;
+    duckdb_destroy_result(&rb_result);
+
+    if (rolled_back) {
+      // Mark recommendation as pending again
+      char mark_buf[256];
+      snprintf(mark_buf, sizeof(mark_buf),
+               "update vizier.recommendation_store set status = 'pending' "
+               "where recommendation_id = %lld",
+               (long long)rec_id);
+      duckdb_result mr;
+      memset(&mr, 0, sizeof(mr));
+      duckdb_query(g_flush_conn, mark_buf, &mr);
+      duckdb_destroy_result(&mr);
+
+      // Update action notes
+      snprintf(mark_buf, sizeof(mark_buf),
+               "update vizier.applied_actions set notes = 'Rolled back' "
+               "where action_id = %lld",
+               (long long)action_id);
+      memset(&mr, 0, sizeof(mr));
+      duckdb_query(g_flush_conn, mark_buf, &mr);
+      duckdb_destroy_result(&mr);
+
+      strncpy(bind_data->status, "rolled back", sizeof(bind_data->status));
+    } else {
+      strncpy(bind_data->status, "rollback failed", sizeof(bind_data->status));
+    }
+  }
+
+rollback_done:
+  duckdb_bind_set_bind_data(info, bind_data, free);
+  duckdb_bind_set_cardinality(info, 1, true);
+}
+
+static void rollback_execute(duckdb_function_info info,
+                             duckdb_data_chunk output) {
+  struct {
+    bool done;
+  } *init_data = duckdb_function_get_init_data(info);
+  if (init_data->done) {
+    duckdb_data_chunk_set_size(output, 0);
+    return;
+  }
+  RollbackBindData *bd =
+      (RollbackBindData *)duckdb_function_get_bind_data(info);
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 0), 0, bd->status,
+      strlen(bd->status));
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 1), 0, bd->inverse_sql,
+      strlen(bd->inverse_sql));
+  duckdb_data_chunk_set_size(output, 1);
+  init_data->done = true;
+}
+
+// ============================================================================
+// vizier_rollback_all() table function — undo all applied in reverse order
+// ============================================================================
+
+typedef struct {
+  int64_t rolled_back;
+  int64_t skipped;
+  bool success;
+} RollbackAllBindData;
+
+static void rollback_all_bind(duckdb_bind_info info) {
+  duckdb_logical_type varchar_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+  duckdb_logical_type bigint_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+  duckdb_bind_add_result_column(info, "status", varchar_type);
+  duckdb_bind_add_result_column(info, "rolled_back", bigint_type);
+  duckdb_bind_add_result_column(info, "skipped", bigint_type);
+  duckdb_destroy_logical_type(&varchar_type);
+  duckdb_destroy_logical_type(&bigint_type);
+
+  RollbackAllBindData *bd =
+      (RollbackAllBindData *)malloc(sizeof(RollbackAllBindData));
+  bd->rolled_back = 0;
+  bd->skipped = 0;
+  bd->success = false;
+
+  if (!g_flush_conn)
+    goto rba_done;
+
+  {
+    // Fetch all successful actions with inverse SQL, in reverse order
+    duckdb_result result;
+    memset(&result, 0, sizeof(result));
+    if (duckdb_query(g_flush_conn,
+                     "select action_id::bigint, inverse_sql::varchar, "
+                     "recommendation_id::bigint "
+                     "from vizier.applied_actions "
+                     "where success = true and notes != 'Rolled back' "
+                     "order by action_id desc",
+                     &result) != DuckDBSuccess) {
+      duckdb_destroy_result(&result);
+      goto rba_done;
+    }
+
+    duckdb_data_chunk chunk;
+    while ((chunk = duckdb_fetch_chunk(result)) != NULL) {
+      idx_t sz = duckdb_data_chunk_get_size(chunk);
+      if (sz == 0) {
+        duckdb_destroy_data_chunk(&chunk);
+        break;
+      }
+      int64_t *aids = (int64_t *)duckdb_vector_get_data(
+          duckdb_data_chunk_get_vector(chunk, 0));
+      duckdb_string_t *invs = (duckdb_string_t *)duckdb_vector_get_data(
+          duckdb_data_chunk_get_vector(chunk, 1));
+      int64_t *rids = (int64_t *)duckdb_vector_get_data(
+          duckdb_data_chunk_get_vector(chunk, 2));
+
+      for (idx_t r = 0; r < sz; r++) {
+        uint32_t inv_len = duckdb_string_t_length(invs[r]);
+        const char *inv_ptr = duckdb_string_t_data(&invs[r]);
+
+        if (inv_len == 0) {
+          bd->skipped++;
+          continue;
+        }
+
+        char inv_sql[4096];
+        size_t cl =
+            inv_len < sizeof(inv_sql) - 1 ? inv_len : sizeof(inv_sql) - 1;
+        memcpy(inv_sql, inv_ptr, cl);
+        inv_sql[cl] = '\0';
+
+        duckdb_result rr;
+        memset(&rr, 0, sizeof(rr));
+        if (duckdb_query(g_flush_conn, inv_sql, &rr) == DuckDBSuccess) {
+          bd->rolled_back++;
+          // Mark action and recommendation
+          char mbuf[256];
+          snprintf(mbuf, sizeof(mbuf),
+                   "update vizier.applied_actions set notes = 'Rolled back' "
+                   "where action_id = %lld",
+                   (long long)aids[r]);
+          duckdb_result mr;
+          memset(&mr, 0, sizeof(mr));
+          duckdb_query(g_flush_conn, mbuf, &mr);
+          duckdb_destroy_result(&mr);
+
+          snprintf(mbuf, sizeof(mbuf),
+                   "update vizier.recommendation_store "
+                   "set status = 'pending' where recommendation_id = %lld",
+                   (long long)rids[r]);
+          memset(&mr, 0, sizeof(mr));
+          duckdb_query(g_flush_conn, mbuf, &mr);
+          duckdb_destroy_result(&mr);
+        } else {
+          bd->skipped++;
+        }
+        duckdb_destroy_result(&rr);
+      }
+      duckdb_destroy_data_chunk(&chunk);
+    }
+    duckdb_destroy_result(&result);
+    bd->success = true;
+  }
+
+rba_done:
+  duckdb_bind_set_bind_data(info, bd, free);
+  duckdb_bind_set_cardinality(info, 1, true);
+}
+
+static void rollback_all_execute(duckdb_function_info info,
+                                 duckdb_data_chunk output) {
+  struct {
+    bool done;
+  } *init_data = duckdb_function_get_init_data(info);
+  if (init_data->done) {
+    duckdb_data_chunk_set_size(output, 0);
+    return;
+  }
+  RollbackAllBindData *bd =
+      (RollbackAllBindData *)duckdb_function_get_bind_data(info);
+  const char *status = bd->success ? "ok" : "error";
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 0), 0, status, strlen(status));
+  ((int64_t *)duckdb_vector_get_data(
+      duckdb_data_chunk_get_vector(output, 1)))[0] = bd->rolled_back;
+  ((int64_t *)duckdb_vector_get_data(
+      duckdb_data_chunk_get_vector(output, 2)))[0] = bd->skipped;
   duckdb_data_chunk_set_size(output, 1);
   init_data->done = true;
 }
@@ -1060,24 +1748,54 @@ static void apply_bind(duckdb_bind_info info) {
           duckdb_query(g_flush_conn, mark_buf, &mark_result);
           duckdb_destroy_result(&mark_result);
 
-          // Log the action
+          // Generate inverse SQL for rollback
+          char inverse_sql[4096] = "";
+          if (applied) {
+            // create index idx_X ... → drop index idx_X
+            if (strncmp(bind_data->sql_text, "create index ", 13) == 0) {
+              // Extract index name: "create index <name> on ..."
+              const char *idx_start = bind_data->sql_text + 13;
+              const char *idx_end = strstr(idx_start, " on ");
+              if (idx_end) {
+                snprintf(inverse_sql, sizeof(inverse_sql), "drop index %.*s",
+                         (int)(idx_end - idx_start), idx_start);
+              }
+            }
+            // drop index X → original sql_text is the inverse (stored in rec)
+            else if (strncmp(bind_data->sql_text, "drop index ", 11) == 0) {
+              // Can't easily invert a drop, leave empty
+            }
+            // create or replace table X as ... → not reversible
+            // copy ... to ... → not reversible
+          }
+
+          // Log the action with inverse SQL
           char *escaped = escape_sql_str(bind_data->sql_text);
-          char log_buf[8192];
+          char *escaped_inv = escape_sql_str(inverse_sql);
+          char log_buf[12288];
           snprintf(log_buf, sizeof(log_buf),
                    "insert into vizier.applied_actions (recommendation_id, "
-                   "sql_text, "
-                   "success, notes) values (%lld, '%s', %s, '%s')",
-                   (long long)rec_id, escaped, applied ? "true" : "false",
+                   "sql_text, inverse_sql, "
+                   "success, notes) values (%lld, '%s', '%s', %s, '%s')",
+                   (long long)rec_id, escaped, escaped_inv,
+                   applied ? "true" : "false",
                    applied ? "Applied successfully" : "Apply failed");
           free(escaped);
+          free(escaped_inv);
           duckdb_result log_result;
           memset(&log_result, 0, sizeof(log_result));
           duckdb_query(g_flush_conn, log_buf, &log_result);
           duckdb_destroy_result(&log_result);
 
           bind_data->success = applied;
-          strncpy(bind_data->status, applied ? "applied" : "failed",
-                  sizeof(bind_data->status));
+          // Warn if irreversible (no inverse SQL generated)
+          if (applied && inverse_sql[0] == '\0') {
+            strncpy(bind_data->status, "applied (irreversible)",
+                    sizeof(bind_data->status));
+          } else {
+            strncpy(bind_data->status, applied ? "applied" : "failed",
+                    sizeof(bind_data->status));
+          }
         }
       } else {
         if (chunk)
@@ -1278,11 +1996,44 @@ static void benchmark_execute(duckdb_function_info info,
 // Benchmarks queries before/after applying a recommendation, stores results.
 // ============================================================================
 
+// Capture EXPLAIN output for a query as a string.
+// Writes into buf (up to buf_size). Returns length written.
+static size_t capture_explain_plan(duckdb_connection conn, const char *sql,
+                                   char *buf, size_t buf_size) {
+  char explain_sql[4200];
+  snprintf(explain_sql, sizeof(explain_sql), "explain %s", sql);
+  duckdb_result result;
+  memset(&result, 0, sizeof(result));
+  size_t written = 0;
+  if (duckdb_query(conn, explain_sql, &result) == DuckDBSuccess) {
+    duckdb_data_chunk chunk = duckdb_fetch_chunk(result);
+    if (chunk && duckdb_data_chunk_get_size(chunk) > 0) {
+      // EXPLAIN returns (explain_key, explain_value) — we want explain_value
+      idx_t ncols = duckdb_data_chunk_get_column_count(chunk);
+      idx_t val_col = ncols > 1 ? 1 : 0;
+      duckdb_vector vec = duckdb_data_chunk_get_vector(chunk, val_col);
+      duckdb_string_t *data = (duckdb_string_t *)duckdb_vector_get_data(vec);
+      uint32_t len = duckdb_string_t_length(data[0]);
+      const char *ptr = duckdb_string_t_data(&data[0]);
+      size_t copy = len < buf_size - 1 ? len : buf_size - 1;
+      memcpy(buf, ptr, copy);
+      buf[copy] = '\0';
+      written = copy;
+    }
+    if (chunk)
+      duckdb_destroy_data_chunk(&chunk);
+  }
+  duckdb_destroy_result(&result);
+  return written;
+}
+
 typedef struct {
   char status[64];
   double baseline_ms;
   double candidate_ms;
   double speedup;
+  char plan_before[4096];
+  char plan_after[4096];
   bool success;
 } CompareBindData;
 
@@ -1301,6 +2052,8 @@ static void compare_bind(duckdb_bind_info info) {
   duckdb_bind_add_result_column(info, "baseline_ms", double_type);
   duckdb_bind_add_result_column(info, "candidate_ms", double_type);
   duckdb_bind_add_result_column(info, "speedup", double_type);
+  duckdb_bind_add_result_column(info, "plan_before", varchar_type);
+  duckdb_bind_add_result_column(info, "plan_after", varchar_type);
   duckdb_destroy_logical_type(&varchar_type);
   duckdb_destroy_logical_type(&double_type);
 
@@ -1314,6 +2067,8 @@ static void compare_bind(duckdb_bind_info info) {
   bind_data->baseline_ms = 0;
   bind_data->candidate_ms = 0;
   bind_data->speedup = 0;
+  bind_data->plan_before[0] = '\0';
+  bind_data->plan_after[0] = '\0';
   bind_data->success = false;
 
   if (!g_flush_conn)
@@ -1378,6 +2133,10 @@ static void compare_bind(duckdb_bind_info info) {
     goto compare_done;
   }
 
+  // Capture plan before
+  capture_explain_plan(g_flush_conn, sample_sql, bind_data->plan_before,
+                       sizeof(bind_data->plan_before));
+
   // Baseline benchmark
   double baseline_total = 0;
   {
@@ -1414,6 +2173,10 @@ static void compare_bind(duckdb_bind_info info) {
     duckdb_destroy_result(&mr);
   }
 
+  // Capture plan after
+  capture_explain_plan(g_flush_conn, sample_sql, bind_data->plan_after,
+                       sizeof(bind_data->plan_after));
+
   // Candidate benchmark (after applying)
   double candidate_total = 0;
   {
@@ -1431,15 +2194,20 @@ static void compare_bind(duckdb_bind_info info) {
                            ? bind_data->baseline_ms / bind_data->candidate_ms
                            : 0;
 
-  // Store in benchmark_results
+  // Store in benchmark_results (with plans)
   {
-    char ins_buf[1024];
+    char *esc_before = escape_sql_str(bind_data->plan_before);
+    char *esc_after = escape_sql_str(bind_data->plan_after);
+    char ins_buf[12288];
     snprintf(ins_buf, sizeof(ins_buf),
              "insert into vizier.benchmark_results "
-             "(recommendation_id, baseline_ms, candidate_ms, speedup) "
-             "values (%lld, %f, %f, %f)",
+             "(recommendation_id, baseline_ms, candidate_ms, speedup, "
+             "plan_before, plan_after) "
+             "values (%lld, %f, %f, %f, '%s', '%s')",
              (long long)rec_id, bind_data->baseline_ms, bind_data->candidate_ms,
-             bind_data->speedup);
+             bind_data->speedup, esc_before, esc_after);
+    free(esc_before);
+    free(esc_after);
     duckdb_result ir;
     memset(&ir, 0, sizeof(ir));
     duckdb_query(g_flush_conn, ins_buf, &ir);
@@ -1484,6 +2252,316 @@ static void compare_execute(duckdb_function_info info,
   ((double *)duckdb_vector_get_data(
       duckdb_data_chunk_get_vector(output, 3)))[0] = bd->speedup;
 
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 4), 0, bd->plan_before,
+      strlen(bd->plan_before));
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 5), 0, bd->plan_after,
+      strlen(bd->plan_after));
+
+  duckdb_data_chunk_set_size(output, 1);
+  init_data->done = true;
+}
+
+// ============================================================================
+// vizier_replay() table function — re-runs all captured queries
+// ============================================================================
+
+#define REPLAY_RUNS 3
+
+typedef struct {
+  int64_t queries_replayed;
+  double total_ms;
+  bool success;
+} ReplayBindData;
+
+static void replay_bind(duckdb_bind_info info) {
+  duckdb_logical_type varchar_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+  duckdb_logical_type bigint_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+  duckdb_logical_type double_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_DOUBLE);
+  duckdb_bind_add_result_column(info, "status", varchar_type);
+  duckdb_bind_add_result_column(info, "queries_replayed", bigint_type);
+  duckdb_bind_add_result_column(info, "total_ms", double_type);
+  duckdb_destroy_logical_type(&varchar_type);
+  duckdb_destroy_logical_type(&bigint_type);
+  duckdb_destroy_logical_type(&double_type);
+
+  ReplayBindData *bind_data = (ReplayBindData *)malloc(sizeof(ReplayBindData));
+  bind_data->queries_replayed = 0;
+  bind_data->total_ms = 0;
+  bind_data->success = false;
+
+  // Check optional table_name filter
+  char filter_table[256] = "";
+  duckdb_value p_tbl = duckdb_bind_get_named_parameter(info, "table_name");
+  if (p_tbl) {
+    char *tbl = duckdb_get_varchar(p_tbl);
+    if (tbl) {
+      strncpy(filter_table, tbl, sizeof(filter_table) - 1);
+      duckdb_free(tbl);
+    }
+    duckdb_destroy_value(&p_tbl);
+  }
+
+  if (!g_flush_conn)
+    goto replay_done;
+
+  {
+    // Clear previous replay results
+    duckdb_result clr;
+    memset(&clr, 0, sizeof(clr));
+    duckdb_query(g_flush_conn, "delete from vizier.replay_results", &clr);
+    duckdb_destroy_result(&clr);
+
+    // Fetch captured queries (optionally filtered by table)
+    char fetch_sql[512];
+    if (filter_table[0] != '\0') {
+      char *esc = escape_sql_str(filter_table);
+      snprintf(fetch_sql, sizeof(fetch_sql),
+               "select query_signature::varchar, sample_sql::varchar "
+               "from vizier.workload_queries "
+               "where tables_json like '%%\"%s\"%%'",
+               esc);
+      free(esc);
+    } else {
+      snprintf(fetch_sql, sizeof(fetch_sql),
+               "select query_signature::varchar, sample_sql::varchar "
+               "from vizier.workload_queries");
+    }
+
+    duckdb_result result;
+    memset(&result, 0, sizeof(result));
+    if (duckdb_query(g_flush_conn, fetch_sql, &result) != DuckDBSuccess) {
+      duckdb_destroy_result(&result);
+      goto replay_done;
+    }
+
+    double grand_total = 0;
+    int64_t count = 0;
+    duckdb_data_chunk chunk;
+    while ((chunk = duckdb_fetch_chunk(result)) != NULL) {
+      idx_t sz = duckdb_data_chunk_get_size(chunk);
+      if (sz == 0) {
+        duckdb_destroy_data_chunk(&chunk);
+        break;
+      }
+      duckdb_vector sig_vec = duckdb_data_chunk_get_vector(chunk, 0);
+      duckdb_vector sql_vec = duckdb_data_chunk_get_vector(chunk, 1);
+      duckdb_string_t *sigs =
+          (duckdb_string_t *)duckdb_vector_get_data(sig_vec);
+      duckdb_string_t *sqls =
+          (duckdb_string_t *)duckdb_vector_get_data(sql_vec);
+
+      for (idx_t r = 0; r < sz; r++) {
+        uint32_t sql_len = duckdb_string_t_length(sqls[r]);
+        const char *sql_ptr = duckdb_string_t_data(&sqls[r]);
+        uint32_t sig_len = duckdb_string_t_length(sigs[r]);
+        const char *sig_ptr = duckdb_string_t_data(&sigs[r]);
+
+        char sql_buf[4096];
+        size_t cl =
+            sql_len < sizeof(sql_buf) - 1 ? sql_len : sizeof(sql_buf) - 1;
+        memcpy(sql_buf, sql_ptr, cl);
+        sql_buf[cl] = '\0';
+
+        // Run the query REPLAY_RUNS times
+        double total = 0;
+        bool ok = true;
+        for (int i = 0; i < REPLAY_RUNS; i++) {
+          double start = get_time_ms();
+          duckdb_result qr;
+          memset(&qr, 0, sizeof(qr));
+          if (duckdb_query(g_flush_conn, sql_buf, &qr) != DuckDBSuccess)
+            ok = false;
+          duckdb_destroy_result(&qr);
+          total += get_time_ms() - start;
+        }
+        double avg = total / REPLAY_RUNS;
+        grand_total += avg;
+        count++;
+
+        // Store result
+        char *esc_sql = escape_sql_str(sql_buf);
+        char ins_buf[8192];
+        snprintf(ins_buf, sizeof(ins_buf),
+                 "insert into vizier.replay_results "
+                 "(query_signature, sample_sql, avg_ms, status) "
+                 "values ('%.*s', '%s', %f, '%s')",
+                 (int)sig_len, sig_ptr, esc_sql, avg, ok ? "ok" : "error");
+        free(esc_sql);
+        duckdb_result ir;
+        memset(&ir, 0, sizeof(ir));
+        duckdb_query(g_flush_conn, ins_buf, &ir);
+        duckdb_destroy_result(&ir);
+      }
+      duckdb_destroy_data_chunk(&chunk);
+    }
+    duckdb_destroy_result(&result);
+
+    bind_data->queries_replayed = count;
+    bind_data->total_ms = grand_total;
+    bind_data->success = true;
+  }
+
+replay_done:
+  duckdb_bind_set_bind_data(info, bind_data, free);
+  duckdb_bind_set_cardinality(info, 1, true);
+}
+
+static void replay_execute(duckdb_function_info info,
+                           duckdb_data_chunk output) {
+  struct {
+    bool done;
+  } *init_data = duckdb_function_get_init_data(info);
+  if (init_data->done) {
+    duckdb_data_chunk_set_size(output, 0);
+    return;
+  }
+  ReplayBindData *bd = (ReplayBindData *)duckdb_function_get_bind_data(info);
+  const char *status = bd->success ? "ok" : "error";
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 0), 0, status, strlen(status));
+  ((int64_t *)duckdb_vector_get_data(
+      duckdb_data_chunk_get_vector(output, 1)))[0] = bd->queries_replayed;
+  ((double *)duckdb_vector_get_data(
+      duckdb_data_chunk_get_vector(output, 2)))[0] = bd->total_ms;
+  duckdb_data_chunk_set_size(output, 1);
+  init_data->done = true;
+}
+
+// ============================================================================
+// vizier_report(path) — export a static HTML report
+// ============================================================================
+
+typedef struct {
+  char status[64];
+  bool success;
+} ReportBindData;
+
+static void report_bind(duckdb_bind_info info) {
+  duckdb_logical_type varchar_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+  duckdb_bind_add_result_column(info, "status", varchar_type);
+  duckdb_bind_add_result_column(info, "path", varchar_type);
+  duckdb_destroy_logical_type(&varchar_type);
+
+  duckdb_value param = duckdb_bind_get_parameter(info, 0);
+  char *file_path = duckdb_get_varchar(param);
+  duckdb_destroy_value(&param);
+
+  ReportBindData *bind_data = (ReportBindData *)malloc(sizeof(ReportBindData));
+  strncpy(bind_data->status, "error", sizeof(bind_data->status));
+  bind_data->success = false;
+
+  if (!g_flush_conn || !file_path)
+    goto report_done;
+
+  {
+    // Build and write HTML report
+    char *esc_path = escape_sql_str(file_path);
+
+    // Use a temp table to build the report, then COPY to file
+    duckdb_result result;
+    memset(&result, 0, sizeof(result));
+    duckdb_query(g_flush_conn,
+                 "create or replace temp table _vizier_report as "
+                 "select "
+                 "'<html><head><meta charset=\"utf-8\">"
+                 "<title>Vizier Report</title>"
+                 "<style>"
+                 "body{font-family:system-ui;max-width:900px;margin:2em "
+                 "auto;padding:0 1em}"
+                 "table{border-collapse:collapse;width:100%}th,td{border:1px "
+                 "solid #ddd;padding:8px;text-align:left}"
+                 "th{background:#f5f5f5}"
+                 "</style></head><body>"
+                 "<h1>Vizier Report</h1>' as html",
+                 &result);
+    duckdb_destroy_result(&result);
+
+    // Append recommendations
+    memset(&result, 0, sizeof(result));
+    duckdb_query(g_flush_conn,
+                 "update _vizier_report set html = html "
+                 "|| '<h2>Recommendations</h2><table>"
+                 "<tr><th>ID</th><th>Kind</th><th>Table</th>"
+                 "<th>Score</th><th>Reason</th></tr>' "
+                 "|| coalesce((select string_agg("
+                 "  '<tr><td>' || recommendation_id || '</td>"
+                 "<td>' || kind || '</td>"
+                 "<td>' || table_name || '</td>"
+                 "<td>' || round(score, 2) || '</td>"
+                 "<td>' || reason || '</td></tr>',"
+                 "  '' order by score desc) "
+                 "  from vizier.recommendation_store "
+                 "  where status = 'pending'), '') "
+                 "|| '</table>'",
+                 &result);
+    duckdb_destroy_result(&result);
+
+    // Append workload
+    memset(&result, 0, sizeof(result));
+    duckdb_query(g_flush_conn,
+                 "update _vizier_report set html = html "
+                 "|| '<h2>Workload</h2><table>"
+                 "<tr><th>Signature</th><th>SQL</th>"
+                 "<th>Runs</th></tr>' "
+                 "|| coalesce((select string_agg("
+                 "  '<tr><td>' || query_signature || '</td>"
+                 "<td>' || left(sample_sql, 100) || '</td>"
+                 "<td>' || execution_count || '</td></tr>',"
+                 "  '' order by execution_count desc) "
+                 "  from vizier.workload_queries), '') "
+                 "|| '</table></body></html>'",
+                 &result);
+    duckdb_destroy_result(&result);
+
+    // Write to file
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+             "copy (select html from _vizier_report) "
+             "to '%s' (format csv, header false, quote '')",
+             esc_path);
+    free(esc_path);
+    memset(&result, 0, sizeof(result));
+    if (duckdb_query(g_flush_conn, buf, &result) == DuckDBSuccess) {
+      bind_data->success = true;
+      strncpy(bind_data->status, "ok", sizeof(bind_data->status));
+    }
+    duckdb_destroy_result(&result);
+
+    // Clean up temp table
+    memset(&result, 0, sizeof(result));
+    duckdb_query(g_flush_conn, "drop table if exists _vizier_report", &result);
+    duckdb_destroy_result(&result);
+  }
+
+report_done:
+  duckdb_free(file_path);
+  duckdb_bind_set_bind_data(info, bind_data, free);
+  duckdb_bind_set_cardinality(info, 1, true);
+}
+
+static void report_execute(duckdb_function_info info,
+                           duckdb_data_chunk output) {
+  struct {
+    bool done;
+  } *init_data = duckdb_function_get_init_data(info);
+  if (init_data->done) {
+    duckdb_data_chunk_set_size(output, 0);
+    return;
+  }
+  ReportBindData *bd = (ReportBindData *)duckdb_function_get_bind_data(info);
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 0), 0, bd->status,
+      strlen(bd->status));
+  // Re-output the path for convenience
+  const char *msg = bd->success ? "Report generated" : "Failed to generate";
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 1), 0, msg, strlen(msg));
   duckdb_data_chunk_set_size(output, 1);
   init_data->done = true;
 }
@@ -1521,6 +2599,70 @@ static void analyze_bind(duckdb_bind_info info) {
     // Returns: -1 = clear failed, 0 = all ok, >0 = number of advisor failures
     advisor_result = zig_run_all_advisors(g_flush_conn);
     ok = (advisor_result >= 0);
+
+    // Estimate selectivity for each (table, column) pair in workload_predicates
+    {
+      duckdb_result pairs;
+      memset(&pairs, 0, sizeof(pairs));
+      if (duckdb_query(g_flush_conn,
+                       "select distinct table_name::varchar, "
+                       "column_name::varchar from vizier.workload_predicates",
+                       &pairs) == DuckDBSuccess) {
+        duckdb_data_chunk chunk;
+        while ((chunk = duckdb_fetch_chunk(pairs)) != NULL) {
+          idx_t sz = duckdb_data_chunk_get_size(chunk);
+          if (sz == 0) {
+            duckdb_destroy_data_chunk(&chunk);
+            break;
+          }
+          duckdb_vector tv = duckdb_data_chunk_get_vector(chunk, 0);
+          duckdb_vector cv = duckdb_data_chunk_get_vector(chunk, 1);
+          duckdb_string_t *tbls = (duckdb_string_t *)duckdb_vector_get_data(tv);
+          duckdb_string_t *cols = (duckdb_string_t *)duckdb_vector_get_data(cv);
+
+          for (idx_t r = 0; r < sz; r++) {
+            uint32_t tl = duckdb_string_t_length(tbls[r]);
+            const char *tp = duckdb_string_t_data(&tbls[r]);
+            uint32_t cl = duckdb_string_t_length(cols[r]);
+            const char *cp = duckdb_string_t_data(&cols[r]);
+
+            // Run: select approx_count_distinct("col")::double /
+            //      greatest(count(*), 1)::double from "table"
+            char qbuf[512];
+            snprintf(qbuf, sizeof(qbuf),
+                     "select approx_count_distinct(\"%.*s\")::double / "
+                     "greatest(count(*), 1)::double from \"%.*s\"",
+                     (int)cl, cp, (int)tl, tp);
+
+            duckdb_result sr;
+            memset(&sr, 0, sizeof(sr));
+            if (duckdb_query(g_flush_conn, qbuf, &sr) == DuckDBSuccess) {
+              duckdb_data_chunk sc = duckdb_fetch_chunk(sr);
+              if (sc && duckdb_data_chunk_get_size(sc) > 0) {
+                duckdb_vector sv = duckdb_data_chunk_get_vector(sc, 0);
+                double selectivity = ((double *)duckdb_vector_get_data(sv))[0];
+
+                char ubuf[512];
+                snprintf(ubuf, sizeof(ubuf),
+                         "update vizier.workload_predicates "
+                         "set avg_selectivity = %f "
+                         "where table_name = '%.*s' and column_name = '%.*s'",
+                         selectivity, (int)tl, tp, (int)cl, cp);
+                duckdb_result ur;
+                memset(&ur, 0, sizeof(ur));
+                duckdb_query(g_flush_conn, ubuf, &ur);
+                duckdb_destroy_result(&ur);
+              }
+              if (sc)
+                duckdb_destroy_data_chunk(&sc);
+            }
+            duckdb_destroy_result(&sr);
+          }
+          duckdb_destroy_data_chunk(&chunk);
+        }
+      }
+      duckdb_destroy_result(&pairs);
+    }
 
     // Count results
     duckdb_result result;
@@ -1620,6 +2762,55 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
     return false;
   }
 
+  // Auto-load state if state_path is configured
+  {
+    duckdb_result result;
+    memset(&result, 0, sizeof(result));
+    if (duckdb_query(g_flush_conn,
+                     "select value::varchar from vizier.settings "
+                     "where key = 'state_path' and value != ''",
+                     &result) == DuckDBSuccess) {
+      duckdb_data_chunk chunk = duckdb_fetch_chunk(result);
+      if (chunk && duckdb_data_chunk_get_size(chunk) > 0) {
+        duckdb_vector vec = duckdb_data_chunk_get_vector(chunk, 0);
+        duckdb_string_t *data = (duckdb_string_t *)duckdb_vector_get_data(vec);
+        uint32_t len = duckdb_string_t_length(data[0]);
+        const char *ptr = duckdb_string_t_data(&data[0]);
+        char path[512];
+        size_t cl = len < sizeof(path) - 1 ? len : sizeof(path) - 1;
+        memcpy(path, ptr, cl);
+        path[cl] = '\0';
+
+        // Try to attach and load (ignore errors — file may not exist yet)
+        char *esc = escape_sql_str(path);
+        char buf[1024];
+        snprintf(buf, sizeof(buf), "attach '%s' as _vstate (read_only)", esc);
+        duckdb_result ar;
+        memset(&ar, 0, sizeof(ar));
+        if (duckdb_query(g_flush_conn, buf, &ar) == DuckDBSuccess) {
+          for (size_t i = 0; i < NUM_PERSIST_TABLES; i++) {
+            snprintf(buf, sizeof(buf),
+                     "insert into vizier.%s select * from _vstate.vizier.%s",
+                     vizier_persist_tables[i], vizier_persist_tables[i]);
+            duckdb_result ir;
+            memset(&ir, 0, sizeof(ir));
+            duckdb_query(g_flush_conn, buf, &ir);
+            duckdb_destroy_result(&ir);
+          }
+          duckdb_result dr;
+          memset(&dr, 0, sizeof(dr));
+          duckdb_query(g_flush_conn, "detach _vstate", &dr);
+          duckdb_destroy_result(&dr);
+        }
+        duckdb_destroy_result(&ar);
+        free(esc);
+      }
+      if (chunk)
+        duckdb_destroy_data_chunk(&chunk);
+    }
+    duckdb_destroy_result(&result);
+  }
+
   // ---- Register vizier_version() scalar function ----
   {
     duckdb_scalar_function func = duckdb_create_scalar_function();
@@ -1656,6 +2847,58 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
     duckdb_destroy_scalar_function(&func);
   }
 
+  // ---- Register vizier_init(path) ----
+  {
+    duckdb_table_function func = duckdb_create_table_function();
+    duckdb_table_function_set_name(func, "vizier_init");
+    duckdb_logical_type vt = duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+    duckdb_table_function_add_parameter(func, vt);
+    duckdb_destroy_logical_type(&vt);
+    duckdb_table_function_set_bind(func, init_state_bind);
+    duckdb_table_function_set_init(func, save_init);
+    duckdb_table_function_set_function(func, init_state_execute);
+    if (duckdb_register_table_function(conn, func) == DuckDBError) {
+      access->set_error(info, "Vizier: failed to register vizier_init");
+      duckdb_destroy_table_function(&func);
+      return false;
+    }
+    duckdb_destroy_table_function(&func);
+  }
+
+  // ---- Register vizier_save(path) and vizier_load(path) ----
+  {
+    duckdb_table_function func = duckdb_create_table_function();
+    duckdb_table_function_set_name(func, "vizier_save");
+    duckdb_logical_type vt = duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+    duckdb_table_function_add_parameter(func, vt);
+    duckdb_destroy_logical_type(&vt);
+    duckdb_table_function_set_bind(func, save_bind);
+    duckdb_table_function_set_init(func, save_init);
+    duckdb_table_function_set_function(func, save_execute);
+    if (duckdb_register_table_function(conn, func) == DuckDBError) {
+      access->set_error(info, "Vizier: failed to register vizier_save");
+      duckdb_destroy_table_function(&func);
+      return false;
+    }
+    duckdb_destroy_table_function(&func);
+  }
+  {
+    duckdb_table_function func = duckdb_create_table_function();
+    duckdb_table_function_set_name(func, "vizier_load");
+    duckdb_logical_type vt = duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+    duckdb_table_function_add_parameter(func, vt);
+    duckdb_destroy_logical_type(&vt);
+    duckdb_table_function_set_bind(func, load_bind);
+    duckdb_table_function_set_init(func, load_init);
+    duckdb_table_function_set_function(func, load_execute);
+    if (duckdb_register_table_function(conn, func) == DuckDBError) {
+      access->set_error(info, "Vizier: failed to register vizier_load");
+      duckdb_destroy_table_function(&func);
+      return false;
+    }
+    duckdb_destroy_table_function(&func);
+  }
+
   // ---- Register vizier_capture(sql) table function ----
   {
     duckdb_table_function func = duckdb_create_table_function();
@@ -1677,6 +2920,24 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
 
   REGISTER_TABLE_FUNC_0(conn, access, info, "vizier_flush", flush_bind,
                         flush_init, flush_execute);
+
+  // ---- Register vizier_rollback(action_id) ----
+  {
+    duckdb_table_function func = duckdb_create_table_function();
+    duckdb_table_function_set_name(func, "vizier_rollback");
+    duckdb_logical_type bi = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+    duckdb_table_function_add_parameter(func, bi);
+    duckdb_destroy_logical_type(&bi);
+    duckdb_table_function_set_bind(func, rollback_bind);
+    duckdb_table_function_set_init(func, save_init);
+    duckdb_table_function_set_function(func, rollback_execute);
+    if (duckdb_register_table_function(conn, func) == DuckDBError) {
+      access->set_error(info, "Vizier: failed to register vizier_rollback");
+      duckdb_destroy_table_function(&func);
+      return false;
+    }
+    duckdb_destroy_table_function(&func);
+  }
 
   // ---- Register vizier_apply_all(min_score, max_actions, dry_run) ----
   {
@@ -1704,6 +2965,9 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
     }
     duckdb_destroy_table_function(&func);
   }
+
+  REGISTER_TABLE_FUNC_0(conn, access, info, "vizier_rollback_all",
+                        rollback_all_bind, save_init, rollback_all_execute);
 
   REGISTER_TABLE_FUNC_0(conn, access, info, "vizier_start_capture",
                         start_capture_bind, session_init, session_execute);
@@ -1833,8 +3097,43 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
     duckdb_destroy_table_function(&func);
   }
 
+  // ---- Register vizier_report(path) ----
+  {
+    duckdb_table_function func = duckdb_create_table_function();
+    duckdb_table_function_set_name(func, "vizier_report");
+    duckdb_logical_type vt = duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+    duckdb_table_function_add_parameter(func, vt);
+    duckdb_destroy_logical_type(&vt);
+    duckdb_table_function_set_bind(func, report_bind);
+    duckdb_table_function_set_init(func, save_init);
+    duckdb_table_function_set_function(func, report_execute);
+    if (duckdb_register_table_function(conn, func) == DuckDBError) {
+      access->set_error(info, "Vizier: failed to register vizier_report");
+      duckdb_destroy_table_function(&func);
+      return false;
+    }
+    duckdb_destroy_table_function(&func);
+  }
+
   REGISTER_TABLE_FUNC_0(conn, access, info, "vizier_analyze", analyze_bind,
                         analyze_init, analyze_execute);
+  // ---- Register vizier_replay(table_name => varchar) ----
+  {
+    duckdb_table_function func = duckdb_create_table_function();
+    duckdb_table_function_set_name(func, "vizier_replay");
+    duckdb_logical_type vt = duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+    duckdb_table_function_add_named_parameter(func, "table_name", vt);
+    duckdb_destroy_logical_type(&vt);
+    duckdb_table_function_set_bind(func, replay_bind);
+    duckdb_table_function_set_init(func, save_init);
+    duckdb_table_function_set_function(func, replay_execute);
+    if (duckdb_register_table_function(conn, func) == DuckDBError) {
+      access->set_error(info, "Vizier: failed to register vizier_replay");
+      duckdb_destroy_table_function(&func);
+      return false;
+    }
+    duckdb_destroy_table_function(&func);
+  }
 
   return true;
 }
