@@ -23,8 +23,10 @@ Priorities, in order:
 
 ## Repository Layout
 
-- `src/extension.c`: C entry point, DuckDB function registration, capture/flush logic.
-- `src/lib.zig`: Root Zig module with C-exported functions.
+- `src/extension.c`: C entry point, DuckDB function registration, capture/flush logic. Uses `add_pending_capture()` helper for all capture
+  paths and `REGISTER_TABLE_FUNC_0` macro for no-parameter table function registration.
+- `src/lib.zig`: Root Zig module with C-exported functions. Key exports: `zig_run_all_advisors(conn)` orchestrates all advisors,
+  `zig_extract_and_store(conn, sig, sql)` populates predicates/JSON, `zig_normalize_sql()` for query normalization.
 - `src/lib_test.zig`: Test harness that pulls in all inline module tests.
 - `src/duckdb.zig`: Auto-generated DuckDB C API bindings (do not edit manually).
 - `src/vizier/schema.zig`: DDL for metadata tables and views.
@@ -32,7 +34,8 @@ Priorities, in order:
 - `src/vizier/extract.zig`: Heuristic SQL tokenizer and predicate/table extractor (pure Zig, no DB deps).
 - `src/vizier/sql_runner.zig`: Connect/query/disconnect wrapper using `duckdb_ext_api`. Also `runOnConn()` for reusing an existing connection.
 - `src/vizier/inspect.zig`: Table reference parsing (pure Zig). The `inspect_table` macro is defined in `schema.zig`.
-- `src/vizier/advisor.zig`: All advisor SQL queries (index, sort, redundant index, parquet layout, summary table), recommendation helper functions.
+- `src/vizier/advisor.zig`: All advisor SQL queries (index, sort, redundant index, parquet layout, summary table, join-path, no-action),
+  the `all_advisor_sqls` array for orchestration, and recommendation helper functions.
 - `src/vizier/summary.zig`: Workload summary view SQL definition.
 - `tests/property_tests.zig`: Property-based tests (using the Minish framework).
 - `tests/integration_tests.zig`: Integration tests that spawn DuckDB and validate output.
@@ -45,8 +48,8 @@ Priorities, in order:
 ### C / Zig Split
 
 - `extension.c` owns the DuckDB entry point (`DUCKDB_EXTENSION_ENTRYPOINT`), function registration, and table function callbacks (bind/init/execute).
-- Zig modules under `src/vizier/` own business logic: schema DDL, hashing, SQL construction.
-- C calls Zig via `extern` functions exported with `callconv(.c)`.
+- Zig modules under `src/vizier/` own business logic: schema DDL, hashing, SQL construction, and advisor orchestration.
+- C calls Zig via `extern` functions exported with `callconv(.c)`. Advisor execution is fully delegated to `zig_run_all_advisors(conn)`.
 - Zig calls DuckDB API functions through the `duckdb_ext_api` global struct (not direct `extern fn` from `duckdb.zig`).
 
 ### DuckDB Extension API Limitations
@@ -69,6 +72,7 @@ Queries are buffered in a global C array (`g_pending`), not written to DB immedi
 snapshot isolation issues.
 
 Multiple capture methods feed into the same `g_pending` buffer:
+
 - `vizier_capture(sql)` — single query capture.
 - `vizier_capture_bulk(table, column)` — reads SQL from a table column via `g_flush_conn`.
 - `vizier_start_capture()` / `vizier_session_log(sql)` / `vizier_stop_capture()` — session-based capture using `vizier.session_log` table.
@@ -107,8 +111,9 @@ For interactive exploration: `make duckdb`.
 Good first tasks:
 
 - Add a new metadata column to a vizier table (update DDL in `schema.zig`).
-- Add a new advisor in `advisor.zig` (follow the index/sort advisor SQL pattern).
+- Add a new advisor in `advisor.zig` (define SQL, add to `all_advisor_sqls` array — it auto-registers).
 - Add a new scalar function (follow the `vizier_version` pattern in `extension.c`).
+- Add a new table macro (add SQL constant in `schema.zig`, register in `ddl_statements` array).
 
 ## Testing Expectations
 

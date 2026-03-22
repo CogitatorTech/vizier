@@ -17,16 +17,7 @@ extern bool zig_extract_and_store(duckdb_connection conn,
                                   const char *sql_text);
 extern void zig_normalize_sql(const char *sql, const char **out_ptr,
                               size_t *out_len);
-extern const char *zig_get_clear_pending_sql(void);
-extern const char *zig_get_index_advisor_sql(void);
-extern const char *zig_get_sort_advisor_sql(void);
-extern const char *zig_get_redundant_index_advisor_sql(void);
-extern const char *zig_get_parquet_sort_advisor_sql(void);
-extern const char *zig_get_parquet_partition_advisor_sql(void);
-extern const char *zig_get_parquet_row_group_advisor_sql(void);
-extern const char *zig_get_summary_table_advisor_sql(void);
-extern const char *zig_get_join_path_advisor_sql(void);
-extern const char *zig_get_no_action_advisor_sql(void);
+extern int64_t zig_run_all_advisors(duckdb_connection conn);
 extern const char *zig_get_count_recommendations_sql(void);
 
 // ============================================================================
@@ -79,6 +70,38 @@ static int64_t fnv1a_hash(const char *str) {
     h *= 1099511628211ULL;
   }
   return (int64_t)h;
+}
+
+// Normalize, hash, and add a SQL query to the pending capture buffer.
+// Returns true on success, false if the buffer is full.
+// sig_out (if non-NULL) receives the 12-char hex signature.
+static bool add_pending_capture(const char *sql, char sig_out[SIG_LEN]) {
+  if (g_pending_count >= MAX_PENDING)
+    return false;
+
+  // Normalize SQL for deduplication
+  const char *norm_ptr = NULL;
+  size_t norm_len = 0;
+  zig_normalize_sql(sql, &norm_ptr, &norm_len);
+
+  char norm_buf[MAX_SQL_LEN];
+  size_t nc = norm_len < MAX_SQL_LEN - 1 ? norm_len : MAX_SQL_LEN - 1;
+  memcpy(norm_buf, norm_ptr, nc);
+  norm_buf[nc] = '\0';
+
+  char sig[SIG_LEN];
+  format_signature((uint64_t)fnv1a_hash(norm_buf), sig);
+
+  memcpy(g_pending[g_pending_count].query_signature, sig, SIG_LEN);
+  strncpy(g_pending[g_pending_count].sql_text, sql, MAX_SQL_LEN - 1);
+  g_pending[g_pending_count].sql_text[MAX_SQL_LEN - 1] = '\0';
+  strncpy(g_pending[g_pending_count].normalized_sql, norm_buf, MAX_SQL_LEN - 1);
+  g_pending[g_pending_count].normalized_sql[MAX_SQL_LEN - 1] = '\0';
+  g_pending_count++;
+
+  if (sig_out)
+    memcpy(sig_out, sig, SIG_LEN);
+  return true;
 }
 
 // Flush all pending captures to the database using the persistent connection.
@@ -199,39 +222,12 @@ static void capture_query_bind(duckdb_bind_info info) {
   char *sql_text = duckdb_get_varchar(param);
   duckdb_destroy_value(&param);
 
-  // Normalize SQL for deduplication
-  const char *norm_ptr = NULL;
-  size_t norm_len = 0;
-  zig_normalize_sql(sql_text, &norm_ptr, &norm_len);
-
-  char norm_buf[MAX_SQL_LEN];
-  size_t copy_len = norm_len < MAX_SQL_LEN - 1 ? norm_len : MAX_SQL_LEN - 1;
-  memcpy(norm_buf, norm_ptr, copy_len);
-  norm_buf[copy_len] = '\0';
-
-  // Hash normalized SQL and format as 12-char hex signature
-  char sig[SIG_LEN];
-  format_signature((uint64_t)fnv1a_hash(norm_buf), sig);
-
-  bool success = false;
-
-  if (g_pending_count < MAX_PENDING) {
-    memcpy(g_pending[g_pending_count].query_signature, sig, SIG_LEN);
-    strncpy(g_pending[g_pending_count].sql_text, sql_text, MAX_SQL_LEN - 1);
-    g_pending[g_pending_count].sql_text[MAX_SQL_LEN - 1] = '\0';
-    strncpy(g_pending[g_pending_count].normalized_sql, norm_buf,
-            MAX_SQL_LEN - 1);
-    g_pending[g_pending_count].normalized_sql[MAX_SQL_LEN - 1] = '\0';
-    g_pending_count++;
-    success = true;
-  }
-
-  duckdb_free(sql_text);
-
   CaptureBindData *bind_data =
       (CaptureBindData *)malloc(sizeof(CaptureBindData));
-  memcpy(bind_data->query_signature, sig, SIG_LEN);
-  bind_data->success = success;
+  bind_data->success =
+      add_pending_capture(sql_text, bind_data->query_signature);
+
+  duckdb_free(sql_text);
   duckdb_bind_set_bind_data(info, bind_data, free);
   duckdb_bind_set_cardinality(info, 1, true);
 }
@@ -548,17 +544,8 @@ static void start_capture_bind(duckdb_bind_info info) {
     strncpy(bind_data->status, "already active", sizeof(bind_data->status));
     bind_data->success = false;
   } else if (g_flush_conn) {
-    // Create session log table if needed
+    // Clear previous session (table created by schema init)
     duckdb_result result;
-    memset(&result, 0, sizeof(result));
-    duckdb_query(g_flush_conn,
-                 "create table if not exists vizier.session_log "
-                 "(sql_text varchar, captured_at timestamp default "
-                 "current_timestamp)",
-                 &result);
-    duckdb_destroy_result(&result);
-
-    // Clear previous session
     memset(&result, 0, sizeof(result));
     duckdb_query(g_flush_conn, "delete from vizier.session_log", &result);
     duckdb_destroy_result(&result);
@@ -649,7 +636,7 @@ static void stop_capture_bind(duckdb_bind_info info) {
             continue;
           uint32_t len = duckdb_string_t_length(data[row]);
           const char *ptr = duckdb_string_t_data(&data[row]);
-          if (len == 0 || g_pending_count >= MAX_PENDING)
+          if (len == 0)
             continue;
 
           char sql_buf[MAX_SQL_LEN];
@@ -657,27 +644,8 @@ static void stop_capture_bind(duckdb_bind_info info) {
           memcpy(sql_buf, ptr, copy_len);
           sql_buf[copy_len] = '\0';
 
-          const char *norm_ptr = NULL;
-          size_t norm_len = 0;
-          zig_normalize_sql(sql_buf, &norm_ptr, &norm_len);
-
-          char norm_buf[MAX_SQL_LEN];
-          size_t nc = norm_len < MAX_SQL_LEN - 1 ? norm_len : MAX_SQL_LEN - 1;
-          memcpy(norm_buf, norm_ptr, nc);
-          norm_buf[nc] = '\0';
-
-          char sig[SIG_LEN];
-          format_signature((uint64_t)fnv1a_hash(norm_buf), sig);
-
-          memcpy(g_pending[g_pending_count].query_signature, sig, SIG_LEN);
-          strncpy(g_pending[g_pending_count].sql_text, sql_buf,
-                  MAX_SQL_LEN - 1);
-          g_pending[g_pending_count].sql_text[MAX_SQL_LEN - 1] = '\0';
-          strncpy(g_pending[g_pending_count].normalized_sql, norm_buf,
-                  MAX_SQL_LEN - 1);
-          g_pending[g_pending_count].normalized_sql[MAX_SQL_LEN - 1] = '\0';
-          g_pending_count++;
-          count++;
+          if (add_pending_capture(sql_buf, NULL))
+            count++;
         }
         duckdb_destroy_data_chunk(&chunk);
       }
@@ -830,7 +798,7 @@ static void import_profile_bind(duckdb_bind_info info) {
             continue;
           uint32_t len = duckdb_string_t_length(data[row]);
           const char *ptr = duckdb_string_t_data(&data[row]);
-          if (len == 0 || g_pending_count >= MAX_PENDING)
+          if (len == 0)
             continue;
 
           char sql_buf[MAX_SQL_LEN];
@@ -838,27 +806,8 @@ static void import_profile_bind(duckdb_bind_info info) {
           memcpy(sql_buf, ptr, copy_len);
           sql_buf[copy_len] = '\0';
 
-          const char *norm_ptr = NULL;
-          size_t norm_len = 0;
-          zig_normalize_sql(sql_buf, &norm_ptr, &norm_len);
-
-          char norm_buf[MAX_SQL_LEN];
-          size_t nc = norm_len < MAX_SQL_LEN - 1 ? norm_len : MAX_SQL_LEN - 1;
-          memcpy(norm_buf, norm_ptr, nc);
-          norm_buf[nc] = '\0';
-
-          char sig[SIG_LEN];
-          format_signature((uint64_t)fnv1a_hash(norm_buf), sig);
-
-          memcpy(g_pending[g_pending_count].query_signature, sig, SIG_LEN);
-          strncpy(g_pending[g_pending_count].sql_text, sql_buf,
-                  MAX_SQL_LEN - 1);
-          g_pending[g_pending_count].sql_text[MAX_SQL_LEN - 1] = '\0';
-          strncpy(g_pending[g_pending_count].normalized_sql, norm_buf,
-                  MAX_SQL_LEN - 1);
-          g_pending[g_pending_count].normalized_sql[MAX_SQL_LEN - 1] = '\0';
-          g_pending_count++;
-          count++;
+          if (add_pending_capture(sql_buf, NULL))
+            count++;
         }
         duckdb_destroy_data_chunk(&chunk);
       }
@@ -966,38 +915,16 @@ static void bulk_capture_bind(duckdb_bind_info info) {
             continue;
           uint32_t len = duckdb_string_t_length(data[row]);
           const char *ptr = duckdb_string_t_data(&data[row]);
-
-          if (len == 0 || g_pending_count >= MAX_PENDING)
+          if (len == 0)
             continue;
 
-          // Normalize the SQL
-          const char *norm_ptr = NULL;
-          size_t norm_len = 0;
-          // Need null-terminated copy for zig_normalize_sql
           char sql_buf[MAX_SQL_LEN];
           size_t copy_len = len < MAX_SQL_LEN - 1 ? len : MAX_SQL_LEN - 1;
           memcpy(sql_buf, ptr, copy_len);
           sql_buf[copy_len] = '\0';
 
-          zig_normalize_sql(sql_buf, &norm_ptr, &norm_len);
-
-          char norm_buf[MAX_SQL_LEN];
-          size_t nc = norm_len < MAX_SQL_LEN - 1 ? norm_len : MAX_SQL_LEN - 1;
-          memcpy(norm_buf, norm_ptr, nc);
-          norm_buf[nc] = '\0';
-
-          char sig[SIG_LEN];
-          format_signature((uint64_t)fnv1a_hash(norm_buf), sig);
-
-          memcpy(g_pending[g_pending_count].query_signature, sig, SIG_LEN);
-          strncpy(g_pending[g_pending_count].sql_text, sql_buf,
-                  MAX_SQL_LEN - 1);
-          g_pending[g_pending_count].sql_text[MAX_SQL_LEN - 1] = '\0';
-          strncpy(g_pending[g_pending_count].normalized_sql, norm_buf,
-                  MAX_SQL_LEN - 1);
-          g_pending[g_pending_count].normalized_sql[MAX_SQL_LEN - 1] = '\0';
-          g_pending_count++;
-          count++;
+          if (add_pending_capture(sql_buf, NULL))
+            count++;
         }
         duckdb_destroy_data_chunk(&chunk);
       }
@@ -1555,6 +1482,7 @@ static void compare_execute(duckdb_function_info info,
 
 typedef struct {
   int64_t recommendation_count;
+  int64_t advisor_failures;
   bool success;
 } AnalyzeBindData;
 
@@ -1572,83 +1500,18 @@ static void analyze_bind(duckdb_bind_info info) {
   duckdb_destroy_logical_type(&varchar_type);
   duckdb_destroy_logical_type(&bigint_type);
 
-  bool ok = true;
+  bool ok = false;
   int64_t count = 0;
+  int64_t advisor_result = -1;
 
   if (g_flush_conn) {
-    duckdb_result result;
-
-    // Clear old pending recommendations
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_clear_pending_sql(), &result) !=
-        DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
-
-    // Run index advisor
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_index_advisor_sql(), &result) !=
-        DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
-
-    // Run sort/clustering advisor
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_sort_advisor_sql(), &result) !=
-        DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
-
-    // Run redundant index advisor
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_redundant_index_advisor_sql(),
-                     &result) != DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
-
-    // Run parquet sort advisor
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_parquet_sort_advisor_sql(),
-                     &result) != DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
-
-    // Run parquet partition advisor
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_parquet_partition_advisor_sql(),
-                     &result) != DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
-
-    // Run parquet row group size advisor
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_parquet_row_group_advisor_sql(),
-                     &result) != DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
-
-    // Run summary table advisor
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_summary_table_advisor_sql(),
-                     &result) != DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
-
-    // Run join-path advisor
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_join_path_advisor_sql(), &result) !=
-        DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
-
-    // Run no-action advisor (must run last — after all other advisors)
-    memset(&result, 0, sizeof(result));
-    if (duckdb_query(g_flush_conn, zig_get_no_action_advisor_sql(), &result) !=
-        DuckDBSuccess)
-      ok = false;
-    duckdb_destroy_result(&result);
+    // Run all advisors (clear pending, run each advisor, no_action last)
+    // Returns: -1 = clear failed, 0 = all ok, >0 = number of advisor failures
+    advisor_result = zig_run_all_advisors(g_flush_conn);
+    ok = (advisor_result >= 0);
 
     // Count results
+    duckdb_result result;
     memset(&result, 0, sizeof(result));
     if (duckdb_query(g_flush_conn, zig_get_count_recommendations_sql(),
                      &result) == DuckDBSuccess) {
@@ -1662,13 +1525,12 @@ static void analyze_bind(duckdb_bind_info info) {
       }
     }
     duckdb_destroy_result(&result);
-  } else {
-    ok = false;
   }
 
   AnalyzeBindData *bind_data =
       (AnalyzeBindData *)malloc(sizeof(AnalyzeBindData));
   bind_data->recommendation_count = count;
+  bind_data->advisor_failures = (ok && advisor_result > 0) ? advisor_result : 0;
   bind_data->success = ok;
   duckdb_bind_set_bind_data(info, bind_data, free);
   duckdb_bind_set_cardinality(info, 1, true);
@@ -1709,6 +1571,23 @@ static void analyze_execute(duckdb_function_info info,
 // ============================================================================
 // Extension entry point
 // ============================================================================
+
+// Helper macro to register a table function with no parameters.
+#define REGISTER_TABLE_FUNC_0(conn, access, info, name, bind_fn, init_fn,      \
+                              exec_fn)                                         \
+  do {                                                                         \
+    duckdb_table_function _f = duckdb_create_table_function();                 \
+    duckdb_table_function_set_name(_f, name);                                  \
+    duckdb_table_function_set_bind(_f, bind_fn);                               \
+    duckdb_table_function_set_init(_f, init_fn);                               \
+    duckdb_table_function_set_function(_f, exec_fn);                           \
+    if (duckdb_register_table_function(conn, _f) == DuckDBError) {             \
+      access->set_error(info, "Vizier: failed to register " name);             \
+      duckdb_destroy_table_function(&_f);                                      \
+      return false;                                                            \
+    }                                                                          \
+    duckdb_destroy_table_function(&_f);                                        \
+  } while (0)
 
 DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
                             struct duckdb_extension_access *access) {
@@ -1784,20 +1663,8 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
     duckdb_destroy_table_function(&func);
   }
 
-  // ---- Register vizier_flush() table function ----
-  {
-    duckdb_table_function func = duckdb_create_table_function();
-    duckdb_table_function_set_name(func, "vizier_flush");
-    duckdb_table_function_set_bind(func, flush_bind);
-    duckdb_table_function_set_init(func, flush_init);
-    duckdb_table_function_set_function(func, flush_execute);
-    if (duckdb_register_table_function(conn, func) == DuckDBError) {
-      access->set_error(info, "Vizier: failed to register vizier_flush");
-      duckdb_destroy_table_function(&func);
-      return false;
-    }
-    duckdb_destroy_table_function(&func);
-  }
+  REGISTER_TABLE_FUNC_0(conn, access, info, "vizier_flush", flush_bind,
+                        flush_init, flush_execute);
 
   // ---- Register vizier_apply_all(min_score, max_actions, dry_run) ----
   {
@@ -1826,36 +1693,10 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
     duckdb_destroy_table_function(&func);
   }
 
-  // ---- Register vizier_start_capture() table function ----
-  {
-    duckdb_table_function func = duckdb_create_table_function();
-    duckdb_table_function_set_name(func, "vizier_start_capture");
-    duckdb_table_function_set_bind(func, start_capture_bind);
-    duckdb_table_function_set_init(func, session_init);
-    duckdb_table_function_set_function(func, session_execute);
-    if (duckdb_register_table_function(conn, func) == DuckDBError) {
-      access->set_error(info,
-                        "Vizier: failed to register vizier_start_capture");
-      duckdb_destroy_table_function(&func);
-      return false;
-    }
-    duckdb_destroy_table_function(&func);
-  }
-
-  // ---- Register vizier_stop_capture() table function ----
-  {
-    duckdb_table_function func = duckdb_create_table_function();
-    duckdb_table_function_set_name(func, "vizier_stop_capture");
-    duckdb_table_function_set_bind(func, stop_capture_bind);
-    duckdb_table_function_set_init(func, session_init);
-    duckdb_table_function_set_function(func, stop_capture_execute);
-    if (duckdb_register_table_function(conn, func) == DuckDBError) {
-      access->set_error(info, "Vizier: failed to register vizier_stop_capture");
-      duckdb_destroy_table_function(&func);
-      return false;
-    }
-    duckdb_destroy_table_function(&func);
-  }
+  REGISTER_TABLE_FUNC_0(conn, access, info, "vizier_start_capture",
+                        start_capture_bind, session_init, session_execute);
+  REGISTER_TABLE_FUNC_0(conn, access, info, "vizier_stop_capture",
+                        stop_capture_bind, session_init, stop_capture_execute);
 
   // ---- Register vizier_session_log(sql) scalar function ----
   {
@@ -1980,20 +1821,8 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
     duckdb_destroy_table_function(&func);
   }
 
-  // ---- Register vizier_analyze() table function ----
-  {
-    duckdb_table_function func = duckdb_create_table_function();
-    duckdb_table_function_set_name(func, "vizier_analyze");
-    duckdb_table_function_set_bind(func, analyze_bind);
-    duckdb_table_function_set_init(func, analyze_init);
-    duckdb_table_function_set_function(func, analyze_execute);
-    if (duckdb_register_table_function(conn, func) == DuckDBError) {
-      access->set_error(info, "Vizier: failed to register vizier_analyze");
-      duckdb_destroy_table_function(&func);
-      return false;
-    }
-    duckdb_destroy_table_function(&func);
-  }
+  REGISTER_TABLE_FUNC_0(conn, access, info, "vizier_analyze", analyze_bind,
+                        analyze_init, analyze_execute);
 
   return true;
 }

@@ -91,46 +91,25 @@ pub export fn zig_extract_and_store(
     return true;
 }
 
-// ---- Advisor SQL accessors (called from extension.c analyze function) ----
+// ---- Advisor orchestration ----
 
-pub export fn zig_get_clear_pending_sql() callconv(.c) [*:0]const u8 {
-    return advisor.clear_pending_sql;
-}
+/// Run all advisors on the given connection.
+/// Clears pending recommendations, then runs each advisor SQL.
+/// Returns 0 on full success, -1 if clear failed, or the count of
+/// individual advisor failures (> 0).
+pub export fn zig_run_all_advisors(conn: duckdb.duckdb_connection) callconv(.c) i64 {
+    // Clear old pending recommendations
+    sql_runner.runOnConn(conn, advisor.clear_pending_sql) catch return -1;
 
-pub export fn zig_get_index_advisor_sql() callconv(.c) [*:0]const u8 {
-    return advisor.index_advisor_sql;
-}
+    // Run each advisor in order (no_action must be last)
+    var failures: i64 = 0;
+    for (advisor.all_advisor_sqls) |sql| {
+        sql_runner.runOnConn(conn, sql) catch {
+            failures += 1;
+        };
+    }
 
-pub export fn zig_get_sort_advisor_sql() callconv(.c) [*:0]const u8 {
-    return advisor.sort_advisor_sql;
-}
-
-pub export fn zig_get_redundant_index_advisor_sql() callconv(.c) [*:0]const u8 {
-    return advisor.redundant_index_advisor_sql;
-}
-
-pub export fn zig_get_parquet_sort_advisor_sql() callconv(.c) [*:0]const u8 {
-    return advisor.parquet_sort_advisor_sql;
-}
-
-pub export fn zig_get_parquet_partition_advisor_sql() callconv(.c) [*:0]const u8 {
-    return advisor.parquet_partition_advisor_sql;
-}
-
-pub export fn zig_get_parquet_row_group_advisor_sql() callconv(.c) [*:0]const u8 {
-    return advisor.parquet_row_group_advisor_sql;
-}
-
-pub export fn zig_get_summary_table_advisor_sql() callconv(.c) [*:0]const u8 {
-    return advisor.summary_table_advisor_sql;
-}
-
-pub export fn zig_get_join_path_advisor_sql() callconv(.c) [*:0]const u8 {
-    return advisor.join_path_advisor_sql;
-}
-
-pub export fn zig_get_no_action_advisor_sql() callconv(.c) [*:0]const u8 {
-    return advisor.no_action_advisor_sql;
+    return failures;
 }
 
 pub export fn zig_get_count_recommendations_sql() callconv(.c) [*:0]const u8 {

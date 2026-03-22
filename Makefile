@@ -24,7 +24,9 @@ SHELL         := /usr/bin/env bash
 # Targets
 ################################################################################
 
-.PHONY: all help build build-all rebuild test test-unit test-property test-integration release clean lint format docs serve-docs install-deps duckdb-translate duckdb
+.PHONY: all help build build-all rebuild test test-unit test-property test-integration release clean \
+ lint format docs serve-docs install-deps duckdb-translate duckdb
+
 .DEFAULT_GOAL := help
 
 help: ## Show the help messages for all targets
@@ -87,6 +89,24 @@ test-integration: build-all  ## Run integration tests (requires DuckDB)
 		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=$(PLATFORM) \
 		$(TEST_FLAGS)
+
+test-sql: build-all  ## Run standalone SQL tests (needs DuckDB)
+	@echo "Running SQL tests..."
+	@fail=0; \
+	for f in tests/sql/*.sql; do \
+		name=$$(basename "$$f"); \
+		if duckdb -unsigned < "$$f" > /dev/null 2>&1; then \
+			printf "  %-40s PASS\n" "$$name"; \
+		else \
+			printf "  %-40s FAIL\n" "$$name"; \
+			fail=1; \
+		fi; \
+	done; \
+	[ $$fail -eq 0 ] && echo "All SQL tests passed." || (echo "Some SQL tests failed." && exit 1)
+
+bench: build-all  ## Run benchmarks (needs DuckDB)
+	@echo "Running benchmarks..."
+	@./benches/run.sh
 
 
 release: ## Build in ReleaseFast mode with metadata

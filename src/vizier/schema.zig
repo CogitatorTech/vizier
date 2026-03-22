@@ -80,6 +80,13 @@ const create_settings_sql =
     \\)
 ;
 
+const create_session_log_sql =
+    \\create table if not exists vizier.session_log (
+    \\    sql_text varchar,
+    \\    captured_at timestamp default current_timestamp
+    \\)
+;
+
 const insert_default_settings_sql =
     \\insert or ignore into vizier.settings (key, value, description) values
     \\  ('min_query_count', '1', 'Minimum query frequency before generating recommendations'),
@@ -292,7 +299,8 @@ const create_analyze_workload_macro_sql =
 const create_recommendations_view_sql =
     \\create or replace view vizier.recommendations as
     \\select recommendation_id, kind, table_name, columns_json,
-    \\  score, confidence, reason, sql_text, status, created_at
+    \\  score, confidence, reason, sql_text, status, created_at,
+    \\  estimated_gain, estimated_build_cost, estimated_maintenance_cost
     \\from vizier.recommendation_store
     \\where status = 'pending'
     \\order by score desc
@@ -301,6 +309,7 @@ const create_recommendations_view_sql =
 const ddl_statements = [_][*:0]const u8{
     create_schema_sql,
     create_settings_sql,
+    create_session_log_sql,
     insert_default_settings_sql,
     create_rec_id_seq_sql,
     create_action_id_seq_sql,

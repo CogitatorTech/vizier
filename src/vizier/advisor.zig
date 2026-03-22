@@ -123,7 +123,8 @@ pub const sort_advisor_sql: [*:0]const u8 =
 /// Recommends dropping the redundant (shorter) index.
 pub const redundant_index_advisor_sql: [*:0]const u8 =
     \\insert into vizier.recommendation_store
-    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text)
+    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text,
+    \\   estimated_gain, estimated_build_cost, estimated_maintenance_cost)
     \\select
     \\  'drop_redundant_index',
     \\  i1.table_name,
@@ -132,7 +133,8 @@ pub const redundant_index_advisor_sql: [*:0]const u8 =
     \\  0.85,
     \\  'Index ' || i1.index_name || ' (' || i1.expressions || ') on ' || i1.table_name
     \\    || ' is redundant — covered by ' || i2.index_name || ' (' || i2.expressions || ')',
-    \\  'drop index ' || i1.index_name
+    \\  'drop index ' || i1.index_name,
+    \\  0.3, 0.0, -0.1
     \\from duckdb_indexes() i1
     \\join duckdb_indexes() i2
     \\  on i1.table_name = i2.table_name
@@ -156,7 +158,8 @@ pub const redundant_index_advisor_sql: [*:0]const u8 =
 /// Targets tables with range/equality predicates to improve Parquet row-group pruning.
 pub const parquet_sort_advisor_sql: [*:0]const u8 =
     \\insert into vizier.recommendation_store
-    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text)
+    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text,
+    \\   estimated_gain, estimated_build_cost, estimated_maintenance_cost)
     \\select
     \\  'parquet_sort_order',
     \\  p.table_name,
@@ -168,7 +171,8 @@ pub const parquet_sort_advisor_sql: [*:0]const u8 =
     \\    || ' for optimal row-group pruning (' || sum(p.freq) || ' predicates across ' || count(*) || ' column(s))',
     \\  'copy (select * from ' || p.table_name || ' order by '
     \\    || string_agg(p.column_name, ', ' order by p.freq desc)
-    \\    || ') to ''' || p.table_name || '.parquet'' (format parquet)'
+    \\    || ') to ''' || p.table_name || '.parquet'' (format parquet)',
+    \\  least(sum(p.freq)::double / 10.0, 1.0), 0.1, 0.0
     \\from (
     \\  select table_name, column_name, count(*) as freq
     \\  from vizier.workload_predicates
@@ -189,7 +193,8 @@ pub const parquet_sort_advisor_sql: [*:0]const u8 =
 /// Recommends partitioning by low-frequency equality columns (potential partition keys).
 pub const parquet_partition_advisor_sql: [*:0]const u8 =
     \\insert into vizier.recommendation_store
-    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text)
+    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text,
+    \\   estimated_gain, estimated_build_cost, estimated_maintenance_cost)
     \\select
     \\  'parquet_partition',
     \\  p.table_name,
@@ -199,7 +204,8 @@ pub const parquet_partition_advisor_sql: [*:0]const u8 =
     \\  'Partition ' || p.table_name || ' by ' || p.column_name
     \\    || ' when exporting to Parquet (' || p.freq || ' equality predicate(s))',
     \\  'copy (select * from ' || p.table_name || ') to ''' || p.table_name
-    \\    || '_partitioned'' (format parquet, partition_by (' || p.column_name || '))'
+    \\    || '_partitioned'' (format parquet, partition_by (' || p.column_name || '))',
+    \\  least(p.freq::double / 5.0, 1.0), 0.2, 0.0
     \\from (
     \\  select table_name, column_name, count(*) as freq
     \\  from vizier.workload_predicates
@@ -221,7 +227,8 @@ pub const parquet_partition_advisor_sql: [*:0]const u8 =
 /// Smaller row groups improve pruning for range-heavy workloads on large tables.
 pub const parquet_row_group_advisor_sql: [*:0]const u8 =
     \\insert into vizier.recommendation_store
-    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text)
+    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text,
+    \\   estimated_gain, estimated_build_cost, estimated_maintenance_cost)
     \\select
     \\  'parquet_row_group_size',
     \\  p.table_name,
@@ -240,7 +247,8 @@ pub const parquet_row_group_advisor_sql: [*:0]const u8 =
     \\    || ' order by ' || p.top_col
     \\    || ') to ''' || p.table_name || '.parquet'' (format parquet, row_group_size '
     \\    || case when coalesce(t.estimated_size, 0) > 10000000 then '50000' else '100000' end
-    \\    || ')'
+    \\    || ')',
+    \\  least(p.range_preds::double / 5.0, 1.0), 0.1, 0.0
     \\from (
     \\  select agg.table_name, agg.range_preds, agg.range_cols, top.column_name as top_col
     \\  from (
@@ -271,7 +279,8 @@ pub const parquet_row_group_advisor_sql: [*:0]const u8 =
 /// Detects repeated GROUP BY patterns and recommends precomputed rollup tables.
 pub const summary_table_advisor_sql: [*:0]const u8 =
     \\insert into vizier.recommendation_store
-    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text)
+    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text,
+    \\   estimated_gain, estimated_build_cost, estimated_maintenance_cost)
     \\select
     \\  'create_summary_table',
     \\  p.table_name,
@@ -283,7 +292,8 @@ pub const summary_table_advisor_sql: [*:0]const u8 =
     \\  'create table vizier_summary_' || p.table_name || ' as select '
     \\    || string_agg(p.column_name, ', ' order by p.freq desc)
     \\    || ', count(*) as cnt from ' || p.table_name
-    \\    || ' group by ' || string_agg(p.column_name, ', ' order by p.freq desc)
+    \\    || ' group by ' || string_agg(p.column_name, ', ' order by p.freq desc),
+    \\  least(sum(p.freq)::double / 8.0, 1.0), 0.3, 0.1
     \\from (
     \\  select table_name, column_name, count(*) as freq
     \\  from vizier.workload_predicates
@@ -305,7 +315,8 @@ pub const summary_table_advisor_sql: [*:0]const u8 =
 /// and recommends sorting both sides by the join key for merge-join compatibility.
 pub const join_path_advisor_sql: [*:0]const u8 =
     \\insert into vizier.recommendation_store
-    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text)
+    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text,
+    \\   estimated_gain, estimated_build_cost, estimated_maintenance_cost)
     \\select
     \\  'sort_for_join',
     \\  p.table_name,
@@ -317,7 +328,8 @@ pub const join_path_advisor_sql: [*:0]const u8 =
     \\    || '; sorting by this column may enable merge joins',
     \\  'create or replace table ' || p.table_name
     \\    || ' as select * from ' || p.table_name
-    \\    || ' order by ' || p.column_name
+    \\    || ' order by ' || p.column_name,
+    \\  least(p.freq::double / 5.0, 1.0), 0.2, 0.0
     \\from (
     \\  select p1.table_name, p1.column_name, count(*) as freq
     \\  from vizier.workload_predicates p1
@@ -341,7 +353,8 @@ pub const join_path_advisor_sql: [*:0]const u8 =
 /// pending actionable recommendations — confirming they are well-optimized.
 pub const no_action_advisor_sql: [*:0]const u8 =
     \\insert into vizier.recommendation_store
-    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text)
+    \\  (kind, table_name, columns_json, score, confidence, reason, sql_text,
+    \\   estimated_gain, estimated_build_cost, estimated_maintenance_cost)
     \\select
     \\  'no_action',
     \\  t.table_name,
@@ -349,7 +362,8 @@ pub const no_action_advisor_sql: [*:0]const u8 =
     \\  0.0,
     \\  1.0,
     \\  'Table ' || t.table_name || ' appears in the workload and has no pending recommendations — no changes needed',
-    \\  ''
+    \\  '',
+    \\  0.0, 0.0, 0.0
     \\from (
     \\  select distinct table_name
     \\  from vizier.workload_predicates
@@ -367,6 +381,20 @@ pub const no_action_advisor_sql: [*:0]const u8 =
     \\      and r2.status = 'pending'
     \\  )
 ;
+
+/// All advisor SQL statements in execution order.
+/// no_action_advisor_sql must be last (it depends on other advisors having run).
+pub const all_advisor_sqls = [_][*:0]const u8{
+    index_advisor_sql,
+    sort_advisor_sql,
+    redundant_index_advisor_sql,
+    parquet_sort_advisor_sql,
+    parquet_partition_advisor_sql,
+    parquet_row_group_advisor_sql,
+    summary_table_advisor_sql,
+    join_path_advisor_sql,
+    no_action_advisor_sql,
+};
 
 /// SQL to clear stale recommendations (optional, called before re-analysis).
 pub const clear_pending_sql: [*:0]const u8 =
