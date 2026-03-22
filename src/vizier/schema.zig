@@ -83,6 +83,35 @@ const create_workload_summary_view_sql =
     \\ORDER BY execution_count DESC
 ;
 
+const create_inspect_table_macro_sql =
+    \\CREATE OR REPLACE MACRO vizier.inspect_table(tbl) AS TABLE
+    \\  SELECT
+    \\    c.table_name::VARCHAR AS table_name,
+    \\    c.column_name::VARCHAR AS column_name,
+    \\    c.data_type::VARCHAR AS column_type,
+    \\    c.is_nullable::BOOLEAN AS is_nullable,
+    \\    t.estimated_size::BIGINT AS estimated_size_bytes,
+    \\    t.index_count::BIGINT AS index_count,
+    \\    COALESCE(p.pred_count, 0)::BIGINT AS predicate_count,
+    \\    COALESCE(p.pred_kinds, '')::VARCHAR AS predicate_kinds
+    \\  FROM duckdb_columns() c
+    \\  JOIN duckdb_tables() t
+    \\    ON c.database_name = t.database_name
+    \\    AND c.schema_name = t.schema_name
+    \\    AND c.table_name = t.table_name
+    \\  LEFT JOIN (
+    \\    SELECT column_name,
+    \\      COUNT(*)::BIGINT AS pred_count,
+    \\      STRING_AGG(DISTINCT predicate_kind, ',') AS pred_kinds
+    \\    FROM vizier.workload_predicates
+    \\    WHERE table_name = tbl
+    \\    GROUP BY column_name
+    \\  ) p ON c.column_name = p.column_name
+    \\  WHERE c.table_name = tbl
+    \\    AND c.internal = false
+    \\  ORDER BY c.column_index
+;
+
 const ddl_statements = [_][*:0]const u8{
     create_schema_sql,
     create_rec_id_seq_sql,
@@ -94,6 +123,7 @@ const ddl_statements = [_][*:0]const u8{
     create_applied_actions_sql,
     create_benchmark_results_sql,
     create_workload_summary_view_sql,
+    create_inspect_table_macro_sql,
 };
 
 /// Initialize the vizier schema and all metadata tables.

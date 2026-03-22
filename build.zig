@@ -132,23 +132,16 @@ pub fn build(b: *std.Build) void {
 
     // Interactive DuckDB session with extension loaded
     const duckdb_step = b.step("duckdb", "Start interactive DuckDB session with extension loaded");
-
-    // Create init file with extension loaded
-    const init_sql_content = b.fmt("echo \"LOAD 'zig-out/lib/{s}'; SELECT 'Extension loaded successfully!' as status;\" > /tmp/duckdb_init.sql", .{extension_filename});
-    const create_init = b.addSystemCommand(&[_][]const u8{
-        "sh",
-        "-c",
-        init_sql_content,
-    });
-    create_init.step.dependOn(&metadata_cmd.step);
-
+    const load_cmd = b.fmt("LOAD 'zig-out/lib/{s}'", .{extension_filename});
     const run_duckdb = b.addSystemCommand(&[_][]const u8{
         "duckdb",
         "-unsigned",
-        "-init",
-        "/tmp/duckdb_init.sql",
+        "-cmd",
+        load_cmd,
+        "-cmd",
+        "SELECT 'Extension loaded successfully!' as status",
     });
-    run_duckdb.step.dependOn(&create_init.step);
+    run_duckdb.step.dependOn(&metadata_cmd.step);
     duckdb_step.dependOn(&run_duckdb.step);
 
     // Generate DuckDB Zig bindings from C API

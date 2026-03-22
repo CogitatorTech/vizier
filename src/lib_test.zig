@@ -4,10 +4,12 @@ const testing = std.testing;
 // Import modules to run their tests
 const capture = @import("vizier/capture.zig");
 const extract = @import("vizier/extract.zig");
+const inspect = @import("vizier/inspect.zig");
 
-// Force extract module tests to be included
+// Force module tests to be included
 comptime {
     _ = extract;
+    _ = inspect;
 }
 
 test "hashQuery is deterministic" {

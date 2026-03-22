@@ -22,7 +22,7 @@ This document outlines the features implemented in Vizier and the future goals f
 ### Schema and Physical Design Inspection
 
 - [x] Metadata tables for workload tracking
-- [ ] `vizier_inspect_table(name)` table size, row count, indexes, column stats
+- [x] `vizier.inspect_table(name)` per-column view: type, nullability, size, indexes, predicate usage
 - [ ] `vizier_inspect_design()` full database physical design overview
 - [ ] Approximate cardinality and null fraction estimation
 - [ ] Row-group and storage layout analysis

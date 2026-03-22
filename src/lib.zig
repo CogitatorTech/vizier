@@ -5,6 +5,7 @@ const duckdb = @import("duckdb");
 pub const schema = @import("vizier/schema.zig");
 pub const capture = @import("vizier/capture.zig");
 pub const extract = @import("vizier/extract.zig");
+pub const inspect = @import("vizier/inspect.zig");
 pub const sql_runner = @import("vizier/sql_runner.zig");
 
 // ============================================================================

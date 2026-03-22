@@ -28,7 +28,7 @@ typedef struct {
 
 static PendingCapture g_pending[MAX_PENDING];
 static int g_pending_count = 0;
-static duckdb_database *g_db = NULL;
+static duckdb_connection g_flush_conn = NULL;
 
 // Escape single quotes for SQL embedding
 static char *escape_sql_str(const char *src) {
@@ -57,14 +57,10 @@ static int64_t fnv1a_hash(const char *str) {
   return (int64_t)h;
 }
 
-// Flush all pending captures to the database
+// Flush all pending captures to the database using the persistent connection.
 static bool flush_pending(void) {
-  if (g_pending_count == 0 || !g_db)
+  if (g_pending_count == 0 || !g_flush_conn)
     return true;
-
-  duckdb_connection conn;
-  if (duckdb_connect(*g_db, &conn) != DuckDBSuccess)
-    return false;
 
   bool all_ok = true;
   for (int i = 0; i < g_pending_count; i++) {
@@ -82,17 +78,16 @@ static bool flush_pending(void) {
 
     duckdb_result result;
     memset(&result, 0, sizeof(result));
-    if (duckdb_query(conn, buf, &result) != DuckDBSuccess) {
+    if (duckdb_query(g_flush_conn, buf, &result) != DuckDBSuccess) {
       all_ok = false;
     } else {
       // Extract predicates and update tables_json/columns_json
-      zig_extract_and_store(conn, g_pending[i].query_hash,
+      zig_extract_and_store(g_flush_conn, g_pending[i].query_hash,
                             g_pending[i].sql_text);
     }
     duckdb_destroy_result(&result);
   }
 
-  duckdb_disconnect(&conn);
   g_pending_count = 0;
   return all_ok;
 }
@@ -268,21 +263,20 @@ static void flush_execute(duckdb_function_info info, duckdb_data_chunk output) {
 
 DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
                             struct duckdb_extension_access *access) {
-  // Store a heap copy of the database handle for later use (flush).
-  duckdb_database *db_temp = access->get_database(info);
-  g_db = (duckdb_database *)malloc(sizeof(duckdb_database));
-  if (!g_db) {
-    access->set_error(info, "Vizier: failed to allocate memory");
+  // Open a persistent connection for flush operations.
+  // This connection stays alive for the lifetime of the extension.
+  duckdb_database *db = access->get_database(info);
+  if (duckdb_connect(*db, &g_flush_conn) != DuckDBSuccess) {
+    access->set_error(info, "Vizier: failed to open persistent connection");
     return false;
   }
-  *g_db = *db_temp;
 
   // Initialize vizier schema and metadata tables
-  if (!zig_init_schema(*g_db)) {
+  if (!zig_init_schema(*db)) {
     access->set_error(
         info, "Vizier: failed to initialize schema and metadata tables");
-    free(g_db);
-    g_db = NULL;
+    duckdb_disconnect(&g_flush_conn);
+    g_flush_conn = NULL;
     return false;
   }
 
