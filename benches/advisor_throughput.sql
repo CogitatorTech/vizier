@@ -1,54 +1,70 @@
 -- Benchmark: Advisor throughput
--- Measures recommendation generation with varying workload sizes.
-LOAD 'zig-out/lib/vizier.duckdb_extension';
+-- Measures how fast vizier_analyze() generates recommendations
+-- at different workload sizes.
+load 'zig-out/lib/vizier.duckdb_extension';
 
--- Generate tables
-CREATE TABLE t1 (id INTEGER, a INTEGER, b VARCHAR, c DOUBLE);
-CREATE TABLE t2 (id INTEGER, x INTEGER, y VARCHAR, z DOUBLE);
-CREATE TABLE t3 (id INTEGER, p INTEGER, q VARCHAR, r DOUBLE);
+create table t1 (id integer, a integer, b varchar, c double);
+create table t2 (id integer, x integer, y varchar, z double);
+create table t3 (id integer, p integer, q varchar, r double);
 
+-- ======================================================================
 -- Small workload: 10 queries
-SELECT * FROM vizier_capture('SELECT * FROM t1 WHERE a = 1');
-SELECT * FROM vizier_capture('SELECT * FROM t1 WHERE a = 2 AND b = ''x''');
-SELECT * FROM vizier_capture('SELECT * FROM t1 WHERE c > 100');
-SELECT * FROM vizier_capture('SELECT * FROM t2 WHERE x = 1');
-SELECT * FROM vizier_capture('SELECT * FROM t2 WHERE x = 2 AND y LIKE ''%test%''');
-SELECT * FROM vizier_capture('SELECT * FROM t2 WHERE z BETWEEN 10 AND 50');
-SELECT * FROM vizier_capture('SELECT * FROM t3 WHERE p = 1');
-SELECT * FROM vizier_capture('SELECT * FROM t3 WHERE p IN (1, 2, 3)');
-SELECT * FROM vizier_capture('SELECT t1.id FROM t1 JOIN t2 ON t1.id = t2.id WHERE t1.a > 5');
-SELECT * FROM vizier_capture('SELECT p, count(*) FROM t3 GROUP BY p');
-SELECT * FROM vizier_flush();
+-- ======================================================================
+select '>>> Capture + flush: 10 queries' as benchmark;
 
-SELECT '=== Small workload: 10 queries ===' AS section;
-SELECT * FROM vizier_analyze();
+select * from vizier_capture('select * from t1 where a = 1');
+select * from vizier_capture('select * from t1 where a = 2 and b = ''x''');
+select * from vizier_capture('select * from t1 where c > 100');
+select * from vizier_capture('select * from t2 where x = 1');
+select * from vizier_capture('select * from t2 where x = 2 and y like ''%test%''');
+select * from vizier_capture('select * from t2 where z between 10 and 50');
+select * from vizier_capture('select * from t3 where p = 1');
+select * from vizier_capture('select * from t3 where p in (1, 2, 3)');
+select * from vizier_capture('select t1.id from t1 join t2 on t1.id = t2.id where t1.a > 5');
+select * from vizier_capture('select p, count(*) from t3 group by p');
+select * from vizier_flush();
 
-SELECT kind, count(*) AS cnt FROM vizier.recommendation_store GROUP BY kind ORDER BY cnt DESC;
+select '>>> Analyze: 10 queries' as benchmark;
+create table _t1 as select epoch_ms(now()::timestamp) as t;
+select * from vizier_analyze();
+select '  analyze time: ' || (epoch_ms(now()::timestamp) - t)::varchar || ' ms' as result from _t1;
 
--- Medium workload: add 20 more queries
-SELECT * FROM vizier_capture('SELECT * FROM t1 WHERE a = 3 AND c < 50');
-SELECT * FROM vizier_capture('SELECT * FROM t1 WHERE b = ''hello'' AND c >= 10');
-SELECT * FROM vizier_capture('SELECT * FROM t2 WHERE x = 3');
-SELECT * FROM vizier_capture('SELECT * FROM t2 WHERE z > 200');
-SELECT * FROM vizier_capture('SELECT * FROM t3 WHERE q = ''val1''');
-SELECT * FROM vizier_capture('SELECT * FROM t3 WHERE r BETWEEN 0 AND 100');
-SELECT * FROM vizier_capture('SELECT a, count(*) FROM t1 GROUP BY a');
-SELECT * FROM vizier_capture('SELECT a, avg(c) FROM t1 GROUP BY a');
-SELECT * FROM vizier_capture('SELECT x, sum(z) FROM t2 GROUP BY x');
-SELECT * FROM vizier_capture('SELECT p, max(r) FROM t3 GROUP BY p');
-SELECT * FROM vizier_capture('SELECT t1.a, t2.x FROM t1 JOIN t2 ON t1.a = t2.x WHERE t1.c > 50');
-SELECT * FROM vizier_capture('SELECT t2.x, t3.p FROM t2 JOIN t3 ON t2.id = t3.id WHERE t2.z > 100');
-SELECT * FROM vizier_capture('SELECT * FROM t1 WHERE a >= 10 AND a <= 20');
-SELECT * FROM vizier_capture('SELECT * FROM t2 WHERE x >= 5 AND y = ''specific''');
-SELECT * FROM vizier_capture('SELECT * FROM t3 WHERE p = 10 AND q LIKE ''prefix%''');
-SELECT * FROM vizier_capture('SELECT * FROM t1 WHERE id = 42');
-SELECT * FROM vizier_capture('SELECT * FROM t2 WHERE id = 99');
-SELECT * FROM vizier_capture('SELECT * FROM t3 WHERE id = 1');
-SELECT * FROM vizier_capture('SELECT a, b, count(*) FROM t1 GROUP BY a, b');
-SELECT * FROM vizier_capture('SELECT x, y, count(*) FROM t2 GROUP BY x, y');
-SELECT * FROM vizier_flush();
+select kind, count(*) as cnt from vizier.recommendation_store group by kind order by cnt desc;
 
-SELECT '=== Medium workload: 30 queries ===' AS section;
-SELECT * FROM vizier_analyze();
+-- ======================================================================
+-- Medium workload: 30 queries total
+-- ======================================================================
+select '>>> Capture + flush: 20 more queries (30 total)' as benchmark;
 
-SELECT kind, count(*) AS cnt FROM vizier.recommendation_store GROUP BY kind ORDER BY cnt DESC;
+select * from vizier_capture('select * from t1 where a = 3 and c < 50');
+select * from vizier_capture('select * from t1 where b = ''hello'' and c >= 10');
+select * from vizier_capture('select * from t2 where x = 3');
+select * from vizier_capture('select * from t2 where z > 200');
+select * from vizier_capture('select * from t3 where q = ''val1''');
+select * from vizier_capture('select * from t3 where r between 0 and 100');
+select * from vizier_capture('select a, count(*) from t1 group by a');
+select * from vizier_capture('select a, avg(c) from t1 group by a');
+select * from vizier_capture('select x, sum(z) from t2 group by x');
+select * from vizier_capture('select p, max(r) from t3 group by p');
+select * from vizier_capture('select t1.a, t2.x from t1 join t2 on t1.a = t2.x where t1.c > 50');
+select * from vizier_capture('select t2.x, t3.p from t2 join t3 on t2.id = t3.id where t2.z > 100');
+select * from vizier_capture('select * from t1 where a >= 10 and a <= 20');
+select * from vizier_capture('select * from t2 where x >= 5 and y = ''specific''');
+select * from vizier_capture('select * from t3 where p = 10 and q like ''prefix%''');
+select * from vizier_capture('select * from t1 where id = 42');
+select * from vizier_capture('select * from t2 where id = 99');
+select * from vizier_capture('select * from t3 where id = 1');
+select * from vizier_capture('select a, b, count(*) from t1 group by a, b');
+select * from vizier_capture('select x, y, count(*) from t2 group by x, y');
+select * from vizier_flush();
+
+select '>>> Analyze: 30 queries' as benchmark;
+create or replace table _t1 as select epoch_ms(now()::timestamp) as t;
+select * from vizier_analyze();
+select '  analyze time: ' || (epoch_ms(now()::timestamp) - t)::varchar || ' ms' as result from _t1;
+
+select '>>> Recommendation breakdown' as benchmark;
+select kind, count(*) as cnt from vizier.recommendation_store group by kind order by cnt desc;
+select count(*) as total_recommendations from vizier.recommendation_store;
+
+drop table _t1;

@@ -95,7 +95,7 @@ test-sql: build-all  ## Run standalone SQL tests (needs DuckDB)
 	@fail=0; \
 	for f in tests/sql/*.sql; do \
 		name=$$(basename "$$f"); \
-		if duckdb -unsigned < "$$f" > /dev/null 2>&1; then \
+		if duckdb -unsigned -c ".read $$f" > /dev/null 2>&1; then \
 			printf "  %-40s PASS\n" "$$name"; \
 		else \
 			printf "  %-40s FAIL\n" "$$name"; \

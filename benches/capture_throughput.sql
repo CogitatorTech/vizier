@@ -1,83 +1,100 @@
 -- Benchmark: Capture and flush throughput
--- Measures capture and flush operations at scale.
-LOAD 'zig-out/lib/vizier.duckdb_extension';
+-- Measures how fast Vizier can capture and persist queries at scale.
+load 'zig-out/lib/vizier.duckdb_extension';
 
--- ======================================
--- Capture: 50 individual queries
--- ======================================
-SELECT '=== Capturing 50 queries ===' AS section;
+-- ======================================================================
+-- 1. Individual capture: 50 queries
+-- ======================================================================
+select '>>> Individual capture: 50 queries' as benchmark;
 
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 1');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 2');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 3');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE b = ''x''');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE b = ''y''');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE c > 100');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE c < 50');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE d BETWEEN 1 AND 10');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE e IN (1, 2, 3)');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE f LIKE ''%test%''');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE a = 1');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE a = 2');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE b = ''hello''');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE c >= 10');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE d <= 100');
-SELECT * FROM vizier_capture('SELECT * FROM v WHERE x = 1');
-SELECT * FROM vizier_capture('SELECT * FROM v WHERE x = 2');
-SELECT * FROM vizier_capture('SELECT * FROM v WHERE y > 50');
-SELECT * FROM vizier_capture('SELECT * FROM v WHERE z BETWEEN 0 AND 1');
-SELECT * FROM vizier_capture('SELECT * FROM v WHERE w IN (''a'', ''b'')');
-SELECT * FROM vizier_capture('SELECT a, count(*) FROM t GROUP BY a');
-SELECT * FROM vizier_capture('SELECT b, sum(c) FROM t GROUP BY b');
-SELECT * FROM vizier_capture('SELECT x, avg(y) FROM v GROUP BY x');
-SELECT * FROM vizier_capture('SELECT a, b, count(*) FROM t GROUP BY a, b');
-SELECT * FROM vizier_capture('SELECT t.a, u.b FROM t JOIN u ON t.id = u.id WHERE t.a > 5');
-SELECT * FROM vizier_capture('SELECT u.a, v.x FROM u JOIN v ON u.id = v.id WHERE v.y > 10');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 4 AND c > 200');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 5 AND b = ''z''');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE a = 3 AND b LIKE ''pre%''');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE c > 50 AND d < 200');
-SELECT * FROM vizier_capture('SELECT * FROM v WHERE x = 3 AND y >= 100');
-SELECT * FROM vizier_capture('SELECT * FROM v WHERE x = 4 AND z > 0.5');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 6');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 7');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 8');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE a = 4');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE a = 5');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE a = 6');
-SELECT * FROM vizier_capture('SELECT * FROM v WHERE x = 5');
-SELECT * FROM vizier_capture('SELECT * FROM v WHERE x = 6');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 1 AND b = ''x'' AND c > 0');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a = 2 AND c BETWEEN 10 AND 100');
-SELECT * FROM vizier_capture('SELECT t.a FROM t JOIN u ON t.a = u.a JOIN v ON u.a = v.x WHERE t.c > 50');
-SELECT * FROM vizier_capture('SELECT * FROM t ORDER BY a, b');
-SELECT * FROM vizier_capture('SELECT * FROM u ORDER BY a DESC');
-SELECT * FROM vizier_capture('SELECT * FROM v ORDER BY x, y');
-SELECT * FROM vizier_capture('SELECT a, count(*) FROM t GROUP BY a HAVING count(*) > 2');
-SELECT * FROM vizier_capture('SELECT x, count(*) FROM v GROUP BY x HAVING count(*) > 1');
-SELECT * FROM vizier_capture('SELECT * FROM t WHERE a IS NULL');
-SELECT * FROM vizier_capture('SELECT * FROM u WHERE b IS NOT NULL AND c > 0');
+create table _t1 as select epoch_ms(now()::timestamp) as t;
 
--- ======================================
--- Flush
--- ======================================
-SELECT '=== Flushing 50 queries ===' AS section;
-SELECT * FROM vizier_flush();
+select * from vizier_capture('select * from t where a = 1');
+select * from vizier_capture('select * from t where a = 2');
+select * from vizier_capture('select * from t where a = 3');
+select * from vizier_capture('select * from t where b = ''x''');
+select * from vizier_capture('select * from t where b = ''y''');
+select * from vizier_capture('select * from t where c > 100');
+select * from vizier_capture('select * from t where c < 50');
+select * from vizier_capture('select * from t where d between 1 and 10');
+select * from vizier_capture('select * from t where e in (1, 2, 3)');
+select * from vizier_capture('select * from t where f like ''%test%''');
+select * from vizier_capture('select * from u where a = 1');
+select * from vizier_capture('select * from u where a = 2');
+select * from vizier_capture('select * from u where b = ''hello''');
+select * from vizier_capture('select * from u where c >= 10');
+select * from vizier_capture('select * from u where d <= 100');
+select * from vizier_capture('select * from v where x = 1');
+select * from vizier_capture('select * from v where x = 2');
+select * from vizier_capture('select * from v where y > 50');
+select * from vizier_capture('select * from v where z between 0 and 1');
+select * from vizier_capture('select * from v where w in (''a'', ''b'')');
+select * from vizier_capture('select a, count(*) from t group by a');
+select * from vizier_capture('select b, sum(c) from t group by b');
+select * from vizier_capture('select x, avg(y) from v group by x');
+select * from vizier_capture('select a, b, count(*) from t group by a, b');
+select * from vizier_capture('select t.a, u.b from t join u on t.id = u.id where t.a > 5');
+select * from vizier_capture('select u.a, v.x from u join v on u.id = v.id where v.y > 10');
+select * from vizier_capture('select * from t where a = 4 and c > 200');
+select * from vizier_capture('select * from t where a = 5 and b = ''z''');
+select * from vizier_capture('select * from u where a = 3 and b like ''pre%''');
+select * from vizier_capture('select * from u where c > 50 and d < 200');
+select * from vizier_capture('select * from v where x = 3 and y >= 100');
+select * from vizier_capture('select * from v where x = 4 and z > 0.5');
+select * from vizier_capture('select * from t where a = 6');
+select * from vizier_capture('select * from t where a = 7');
+select * from vizier_capture('select * from t where a = 8');
+select * from vizier_capture('select * from u where a = 4');
+select * from vizier_capture('select * from u where a = 5');
+select * from vizier_capture('select * from u where a = 6');
+select * from vizier_capture('select * from v where x = 5');
+select * from vizier_capture('select * from v where x = 6');
+select * from vizier_capture('select * from t where a = 1 and b = ''x'' and c > 0');
+select * from vizier_capture('select * from t where a = 2 and c between 10 and 100');
+select * from vizier_capture('select t.a from t join u on t.a = u.a join v on u.a = v.x where t.c > 50');
+select * from vizier_capture('select * from t order by a, b');
+select * from vizier_capture('select * from u order by a desc');
+select * from vizier_capture('select * from v order by x, y');
+select * from vizier_capture('select a, count(*) from t group by a having count(*) > 2');
+select * from vizier_capture('select x, count(*) from v group by x having count(*) > 1');
+select * from vizier_capture('select * from t where a is null');
+select * from vizier_capture('select * from u where b is not null and c > 0');
 
--- ======================================
--- Bulk capture
--- ======================================
-CREATE TABLE bulk_log AS
-  SELECT 'SELECT * FROM orders WHERE customer_id = ' || i::VARCHAR AS sql_text
-  FROM range(500) t(i);
+select '  capture 50 queries: ' || (epoch_ms(now()::timestamp) - t)::varchar || ' ms' as result from _t1;
 
-SELECT '=== Bulk capture (500 queries) ===' AS section;
-SELECT * FROM vizier_capture_bulk('bulk_log', 'sql_text');
-SELECT * FROM vizier_flush();
+-- ======================================================================
+-- 2. Flush: persist 50 captured queries
+-- ======================================================================
+select '>>> Flush: 50 pending queries' as benchmark;
+create or replace table _t1 as select epoch_ms(now()::timestamp) as t;
+select * from vizier_flush();
+select '  flush 50 queries:   ' || (epoch_ms(now()::timestamp) - t)::varchar || ' ms' as result from _t1;
 
--- ======================================
+select count(*) as distinct_queries from vizier.workload_queries;
+select count(*) as predicates_extracted from vizier.workload_predicates;
+
+-- ======================================================================
+-- 3. Bulk capture: 500 queries from a table
+-- ======================================================================
+create table bulk_log as
+  select 'select * from orders where customer_id = ' || i::varchar as sql_text
+  from range(500) t(i);
+
+select '>>> Bulk capture: 500 queries from table' as benchmark;
+create or replace table _t1 as select epoch_ms(now()::timestamp) as t;
+select * from vizier_capture_bulk('bulk_log', 'sql_text');
+select '  bulk capture 500:   ' || (epoch_ms(now()::timestamp) - t)::varchar || ' ms' as result from _t1;
+
+select '>>> Flush: after bulk capture' as benchmark;
+create or replace table _t1 as select epoch_ms(now()::timestamp) as t;
+select * from vizier_flush();
+select '  flush bulk:         ' || (epoch_ms(now()::timestamp) - t)::varchar || ' ms' as result from _t1;
+
+-- ======================================================================
 -- Summary
--- ======================================
-SELECT '=== Final state ===' AS section;
-SELECT count(*) AS total_queries FROM vizier.workload_queries;
-SELECT count(*) AS total_predicates FROM vizier.workload_predicates;
+-- ======================================================================
+select '>>> Final counts' as benchmark;
+select count(*) as total_queries from vizier.workload_queries;
+select count(*) as total_predicates from vizier.workload_predicates;
+
+drop table _t1;

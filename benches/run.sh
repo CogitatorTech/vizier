@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run all Vizier benchmarks.
+# Run all Vizier benchmarks with structured output.
 # Usage: ./benches/run.sh [benchmark_name]
 # Examples:
 #   ./benches/run.sh              # Run all benchmarks
@@ -15,27 +15,31 @@ if ! command -v "$DUCKDB" &>/dev/null; then
     exit 1
 fi
 
-run_bench() {
-    local file="$1"
-    local name
-    name="$(basename "$file" .sql)"
-    echo "━━━ $name ━━━"
-    local start
-    start=$(date +%s%N)
-    "$DUCKDB" -unsigned <"$file"
-    local end
-    end=$(date +%s%N)
-    local elapsed_ms=$(( (end - start) / 1000000 ))
-    echo "━━━ $name completed in ${elapsed_ms}ms ━━━"
-    echo ""
-}
-
 filter="${1:-}"
+total_pass=0
+total_fail=0
 
 for f in "$SCRIPT_DIR"/*.sql; do
     name="$(basename "$f" .sql)"
     if [ -n "$filter" ] && [[ "$name" != *"$filter"* ]]; then
         continue
     fi
-    run_bench "$f"
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  $name"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    if "$DUCKDB" -unsigned -column -c ".read $f" 2>&1; then
+        total_pass=$((total_pass + 1))
+    else
+        echo "  FAILED"
+        total_fail=$((total_fail + 1))
+    fi
+    echo ""
 done
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Summary: $total_pass passed, $total_fail failed"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+[ "$total_fail" -eq 0 ]

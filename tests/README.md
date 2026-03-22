@@ -32,3 +32,11 @@ zig build test-unit
 zig build test-integration
 zig build test-property
 ```
+
+### Running SQL Tests
+
+SQL tests are in the [sql](sql) directory.
+
+```bash
+make test-sql
+```

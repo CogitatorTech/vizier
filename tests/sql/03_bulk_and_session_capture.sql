@@ -1,20 +1,20 @@
 -- Test: Bulk capture and session capture
-LOAD 'zig-out/lib/vizier.duckdb_extension';
+load 'zig-out/lib/vizier.duckdb_extension';
 
 -- Bulk capture from a query log table
-CREATE TABLE query_log (sql_text VARCHAR);
-INSERT INTO query_log VALUES ('SELECT * FROM orders WHERE id = 1');
-INSERT INTO query_log VALUES ('SELECT * FROM orders WHERE id = 2');
-INSERT INTO query_log VALUES ('SELECT count(*) FROM events GROUP BY aid');
+create table query_log (sql_text varchar);
+insert into query_log values ('select * from orders where id = 1');
+insert into query_log values ('select * from orders where id = 2');
+insert into query_log values ('select count(*) from events group by aid');
 
-SELECT * FROM vizier_capture_bulk('query_log', 'sql_text');
-SELECT * FROM vizier_flush();
-SELECT count(*) AS after_bulk FROM vizier.workload_queries;
+select * from vizier_capture_bulk('query_log', 'sql_text');
+select * from vizier_flush();
+select count(*) as after_bulk from vizier.workload_queries;
 
 -- Session capture
-SELECT * FROM vizier_start_capture();
-SELECT vizier_session_log('SELECT * FROM users WHERE email = ''test@example.com''');
-SELECT vizier_session_log('SELECT * FROM users WHERE email = ''other@example.com''');
-SELECT * FROM vizier_stop_capture();
+select * from vizier_start_capture();
+select vizier_session_log('select * from users where email = ''test@example.com''');
+select vizier_session_log('select * from users where email = ''other@example.com''');
+select * from vizier_stop_capture();
 
-SELECT count(*) AS after_session FROM vizier.workload_queries;
+select count(*) as after_session from vizier.workload_queries;
