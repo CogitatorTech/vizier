@@ -32,7 +32,7 @@ Priorities, in order:
 - `src/vizier/extract.zig`: Heuristic SQL tokenizer and predicate/table extractor (pure Zig, no DB deps).
 - `src/vizier/sql_runner.zig`: Connect/query/disconnect wrapper using `duckdb_ext_api`. Also `runOnConn()` for reusing an existing connection.
 - `src/vizier/inspect.zig`: Table reference parsing (pure Zig). The `inspect_table` macro is defined in `schema.zig`.
-- `src/vizier/advisor.zig`: Index and sort advisor SQL queries, recommendation helper functions.
+- `src/vizier/advisor.zig`: All advisor SQL queries (index, sort, redundant index, parquet layout, summary table), recommendation helper functions.
 - `src/vizier/summary.zig`: Workload summary view SQL definition.
 - `tests/property_tests.zig`: Property-based tests (using the Minish framework).
 - `tests/integration_tests.zig`: Integration tests that spawn DuckDB and validate output.
@@ -67,6 +67,12 @@ Queries are buffered in a global C array (`g_pending`), not written to DB immedi
 `vizier_flush()` uses a persistent connection (`g_flush_conn`) opened during extension init to write all pending captures.
 `vizier.workload_summary` and `vizier.inspect_table()` are SQL VIEWs/MACROs, not table functions, because they run on the user's connection and avoid
 snapshot isolation issues.
+
+Multiple capture methods feed into the same `g_pending` buffer:
+- `vizier_capture(sql)` — single query capture.
+- `vizier_capture_bulk(table, column)` — reads SQL from a table column via `g_flush_conn`.
+- `vizier_start_capture()` / `vizier_session_log(sql)` / `vizier_stop_capture()` — session-based capture using `vizier.session_log` table.
+- `vizier_import_profile(path)` — reads from DuckDB JSON profiling output via `read_json_auto`.
 
 ## Zig and C Conventions
 

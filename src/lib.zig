@@ -105,6 +105,34 @@ pub export fn zig_get_sort_advisor_sql() callconv(.c) [*:0]const u8 {
     return advisor.sort_advisor_sql;
 }
 
+pub export fn zig_get_redundant_index_advisor_sql() callconv(.c) [*:0]const u8 {
+    return advisor.redundant_index_advisor_sql;
+}
+
+pub export fn zig_get_parquet_sort_advisor_sql() callconv(.c) [*:0]const u8 {
+    return advisor.parquet_sort_advisor_sql;
+}
+
+pub export fn zig_get_parquet_partition_advisor_sql() callconv(.c) [*:0]const u8 {
+    return advisor.parquet_partition_advisor_sql;
+}
+
+pub export fn zig_get_parquet_row_group_advisor_sql() callconv(.c) [*:0]const u8 {
+    return advisor.parquet_row_group_advisor_sql;
+}
+
+pub export fn zig_get_summary_table_advisor_sql() callconv(.c) [*:0]const u8 {
+    return advisor.summary_table_advisor_sql;
+}
+
+pub export fn zig_get_join_path_advisor_sql() callconv(.c) [*:0]const u8 {
+    return advisor.join_path_advisor_sql;
+}
+
+pub export fn zig_get_no_action_advisor_sql() callconv(.c) [*:0]const u8 {
+    return advisor.no_action_advisor_sql;
+}
+
 pub export fn zig_get_count_recommendations_sql() callconv(.c) [*:0]const u8 {
     return advisor.count_recommendations_sql;
 }

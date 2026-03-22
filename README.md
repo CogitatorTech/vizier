@@ -69,31 +69,42 @@ Example output:
 
 ```
 ┌──────────────┬────────────────────────────────────────────────────────────────────────┬───────┬─────────────────────┬────────┐
-│     sig      │                                  sql                                   │ runs  │      last_seen      │ avg_ms │                                    
-│   varchar    │                                varchar                                 │ int32 │       varchar       │ double │                                    
-├──────────────┼────────────────────────────────────────────────────────────────────────┼───────┼─────────────────────┼────────┤                                    
-│ 8c9d7175aab0 │ SELECT * FROM events WHERE account_id = 42 AND ts >= DATE '2026-01-01' │     2 │ 2026-03-22 16:44:06 │    0.0 │                                    
-│ 2af899d9dba6 │ SELECT count(*) FROM orders GROUP BY customer_id                       │     1 │ 2026-03-22 16:44:06 │    0.0 │                                    
+│     sig      │                                  sql                                   │ runs  │      last_seen      │ avg_ms │  
+│   varchar    │                                varchar                                 │ int32 │       varchar       │ double │  
+├──────────────┼────────────────────────────────────────────────────────────────────────┼───────┼─────────────────────┼────────┤  
+│ 8c9d7175aab0 │ SELECT * FROM events WHERE account_id = 42 AND ts >= DATE '2026-01-01' │     2 │ 2026-03-22 16:44:06 │    0.0 │  
+│ 2af899d9dba6 │ SELECT count(*) FROM orders GROUP BY customer_id                       │     1 │ 2026-03-22 16:44:06 │    0.0 │  
 └──────────────┴────────────────────────────────────────────────────────────────────────┴───────┴─────────────────────┴────────┘  
 ```
 
 #### Current API
 
-| Function                      | Type           | Description                                             |
-|-------------------------------|----------------|---------------------------------------------------------|
-| `vizier_version()`            | Scalar         | Returns the extension version                           |
-| `vizier_capture(sql)`         | Table function | Captures a query (normalized and deduplicated)          |
-| `vizier_flush()`              | Table function | Persists captured queries to metadata tables            |
-| `vizier_analyze()`            | Table function | Runs index and sort advisors, generates recommendations |
-| `vizier_apply(id)`            | Table function | Executes a recommendation and logs the action           |
-| `vizier.inspect_table(name)`  | Table macro    | Per-column view: type, size, indexes, predicate usage   |
-| `vizier.recommendations`      | View           | Pending recommendations ranked by score                 |
-| `vizier.workload_summary`     | View           | Summary of captured workload by frequency               |
-| `vizier.workload_queries`     | Table          | Raw captured query data                                 |
-| `vizier.workload_predicates`  | Table          | Predicate tracking per query                            |
-| `vizier.recommendation_store` | Table          | All recommendations (pending, applied, and failed)      |
-| `vizier.applied_actions`      | Table          | Applied recommendation log                              |
-| `vizier.benchmark_results`    | Table          | Before and after benchmark data                         |
+| Function                              | Type           | Description                                                     |
+|---------------------------------------|----------------|-----------------------------------------------------------------|
+| `vizier_version()`                    | Scalar         | Returns the Vizier version                                      |
+| `vizier_capture(sql)`                 | Table function | Captures a query (normalized and deduplicated)                  |
+| `vizier_capture_bulk(table, column)`  | Table function | Bulk capture SQL queries from a table column                    |
+| `vizier_start_capture()`              | Table function | Starts a capture session                                        |
+| `vizier_stop_capture()`               | Table function | Stops capture, imports logged queries, and flushes              |
+| `vizier_session_log(sql)`             | Scalar         | Logs a query to the active capture session                      |
+| `vizier_import_profile(path)`         | Table function | Imports queries from a DuckDB JSON profiling file               |
+| `vizier_flush()`                      | Table function | Persists captured queries to metadata tables                    |
+| `vizier_analyze()`                    | Table function | Runs all advisors and generates recommendations                 |
+| `vizier_apply(id, dry_run => bool)`   | Table function | Executes a recommendation (or previews with `dry_run => true`)  |
+| `vizier_apply_all(min_score, ...)`    | Table function | Applies all recommendations above a score threshold             |
+| `vizier_compare(id)`                  | Table function | Benchmarks before/after applying a recommendation               |
+| `vizier_benchmark(sql, runs)`         | Table function | Runs a query N times and returns timing stats                   |
+| `vizier_configure(key, value)`        | Scalar         | Updates a Vizier configuration setting                          |
+| `vizier.inspect_table(name)`          | Table macro    | Per-column view: type, size, storage info, predicate usage      |
+| `vizier.overview()`                   | Table macro    | All user tables with sizes, indexes, and predicate hotspots     |
+| `vizier.explain(id)`                  | Table macro    | Detailed reasoning for a recommendation                         |
+| `vizier.score_breakdown(id)`          | Table macro    | Transparent scoring components for a recommendation             |
+| `vizier.compare(id)`                  | Table macro    | Before/after benchmark comparison view                          |
+| `vizier.analyze_table(name)`          | Table macro    | Recommendations filtered by table                               |
+| `vizier.analyze_workload(since, min)` | Table macro    | Workload queries filtered by time and execution count           |
+| `vizier.recommendations`              | View           | Pending recommendations ranked by score                         |
+| `vizier.workload_summary`             | View           | Summary of captured workload by frequency                       |
+| `vizier.settings`                     | Table          | Configuration key-value pairs                                   |
 
 ---
 
