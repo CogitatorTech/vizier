@@ -98,6 +98,8 @@ make duckdb
 
 #### Simple Example
 
+The example below assumes you already picked the correct `.duckdb_extension` asset from the release page for your platform.
+
 ```sql
 install 'https://github.com/CogitatorTech/vizier/releases/download/v0.1.0/vizier-linux-amd64.duckdb_extension';
 load vizier;

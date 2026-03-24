@@ -18,9 +18,37 @@ make test
 make duckdb
 ```
 
-## Loading the Extension
+## Install from a Release
+
+Open the [latest release](https://github.com/CogitatorTech/vizier/releases/latest), find the platform-specific `.duckdb_extension` asset, copy its download URL, and install that asset URL before `load vizier;`.
+
+Choose the asset that matches your platform:
+
+- Linux AMD64: `vizier-linux-amd64.duckdb_extension`
+- Linux ARM64: `vizier-linux-arm64.duckdb_extension`
+- Linux AMD64 (musl): `vizier-linux-amd64-musl.duckdb_extension`
+- Linux ARM64 (musl): `vizier-linux-arm64-musl.duckdb_extension`
+- macOS ARM64: `vizier-macos-arm64.duckdb_extension`
+- Windows AMD64: `vizier-windows-amd64.duckdb_extension`
+- Windows ARM64: `vizier-windows-arm64.duckdb_extension`
+- FreeBSD AMD64: `vizier-freebsd-amd64.duckdb_extension`
+
+Replace `v0.1.0` with the release tag you want:
 
 ```sql
+install 'https://github.com/CogitatorTech/vizier/releases/download/v0.1.0/vizier-linux-amd64.duckdb_extension';
+load vizier;
+```
+
+> Vizier is currently distributed as an unsigned extension.
+> Start DuckDB with `-unsigned`, or enable unsigned extensions in your client before installing and loading Vizier.
+
+## Loading the Extension
+
+After choosing the correct `.duckdb_extension` asset from the release page for your platform:
+
+```sql
+install 'https://github.com/CogitatorTech/vizier/releases/download/v0.1.0/vizier-linux-amd64.duckdb_extension';
 load vizier;
 ```
 
