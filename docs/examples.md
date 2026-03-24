@@ -1,12 +1,17 @@
 # Examples
 
+Before running the examples below, open the [latest release](https://github.com/CogitatorTech/vizier/releases/latest), pick the `.duckdb_extension` asset for your platform, copy its download URL, then install that asset URL and `load vizier;`.
+
+```sql
+install 'https://github.com/CogitatorTech/vizier/releases/download/v0.1.0/vizier-linux-amd64.duckdb_extension';
+load vizier;
+```
+
 ## Index Recommendations
 
 Capture queries with equality filters and let Vizier detect index candidates:
 
 ```sql
-load vizier;
-
 -- Simulate a workload with repeated equality lookups
 select * from vizier_capture('select * from customers where email = ''alice@example.com''');
 select * from vizier_capture('select * from customers where email = ''bob@example.com''');
