@@ -445,6 +445,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#install-from-a-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install from a Release
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#loading-the-extension" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -671,6 +682,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#install-from-a-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install from a Release
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#loading-the-extension" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -832,73 +854,96 @@
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># Try Vizier interactively (needs DuckDB in PATH)</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>make<span class="w"> </span>duckdb
 </code></pre></div>
+<h2 id="install-from-a-release">Install from a Release<a class="headerlink" href="#install-from-a-release" title="Permanent link">&para;</a></h2>
+<p>Open the <a href="https://github.com/CogitatorTech/vizier/releases/latest">latest release</a>, find the platform-specific <code>.duckdb_extension</code> asset, copy its download URL, and install that asset URL before <code>load vizier;</code>.</p>
+<p>Choose the asset that matches your platform:</p>
+<ul>
+<li>Linux AMD64: <code>vizier-linux-amd64.duckdb_extension</code></li>
+<li>Linux ARM64: <code>vizier-linux-arm64.duckdb_extension</code></li>
+<li>Linux AMD64 (musl): <code>vizier-linux-amd64-musl.duckdb_extension</code></li>
+<li>Linux ARM64 (musl): <code>vizier-linux-arm64-musl.duckdb_extension</code></li>
+<li>macOS ARM64: <code>vizier-macos-arm64.duckdb_extension</code></li>
+<li>Windows AMD64: <code>vizier-windows-amd64.duckdb_extension</code></li>
+<li>Windows ARM64: <code>vizier-windows-arm64.duckdb_extension</code></li>
+<li>FreeBSD AMD64: <code>vizier-freebsd-amd64.duckdb_extension</code></li>
+</ul>
+<p>Replace <code>v0.1.0</code> with the release tag you want:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">install</span><span class="w"> </span><span class="s1">&#39;https://github.com/CogitatorTech/vizier/releases/download/v0.1.0/vizier-linux-amd64.duckdb_extension&#39;</span><span class="p">;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">load</span><span class="w"> </span><span class="n">vizier</span><span class="p">;</span>
+</code></pre></div>
+<blockquote>
+<p>Vizier is currently distributed as an unsigned extension.
+Start DuckDB with <code>-unsigned</code>, or enable unsigned extensions in your client before installing and loading Vizier.</p>
+</blockquote>
 <h2 id="loading-the-extension">Loading the Extension<a class="headerlink" href="#loading-the-extension" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">load</span><span class="w"> </span><span class="n">vizier</span><span class="p">;</span>
+<p>After choosing the correct <code>.duckdb_extension</code> asset from the release page for your platform:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">install</span><span class="w"> </span><span class="s1">&#39;https://github.com/CogitatorTech/vizier/releases/download/v0.1.0/vizier-linux-amd64.duckdb_extension&#39;</span><span class="p">;</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">load</span><span class="w"> </span><span class="n">vizier</span><span class="p">;</span>
 </code></pre></div>
 <h2 id="basic-workflow">Basic Workflow<a class="headerlink" href="#basic-workflow" title="Permanent link">&para;</a></h2>
 <p>Vizier follows a capture, analyze, and apply workflow.</p>
 <h3 id="1-capture-queries">1. Capture Queries<a class="headerlink" href="#1-capture-queries" title="Permanent link">&para;</a></h3>
 <p>Feed Vizier the queries you run against your database:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_capture</span><span class="p">(</span><span class="s1">&#39;select * from events where account_id = 42 and ts &gt;= date &#39;&#39;2026-01-01&#39;&#39;&#39;</span><span class="p">);</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_capture</span><span class="p">(</span><span class="s1">&#39;select count(*) from orders group by customer_id&#39;</span><span class="p">);</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_capture</span><span class="p">(</span><span class="s1">&#39;select * from events where account_id = 42 and ts &gt;= date &#39;&#39;2026-01-01&#39;&#39;&#39;</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_capture</span><span class="p">(</span><span class="s1">&#39;select * from events where account_id = 42 and ts &gt;= date &#39;&#39;2026-01-01&#39;&#39;&#39;</span><span class="p">);</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_capture</span><span class="p">(</span><span class="s1">&#39;select count(*) from orders group by customer_id&#39;</span><span class="p">);</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_capture</span><span class="p">(</span><span class="s1">&#39;select * from events where account_id = 42 and ts &gt;= date &#39;&#39;2026-01-01&#39;&#39;&#39;</span><span class="p">);</span>
 </code></pre></div>
 <p>Flush captured queries to metadata tables:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_flush</span><span class="p">();</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_flush</span><span class="p">();</span>
 </code></pre></div>
 <h3 id="2-review-the-workload">2. Review the Workload<a class="headerlink" href="#2-review-the-workload" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier</span><span class="p">.</span><span class="n">workload_summary</span><span class="p">;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier</span><span class="p">.</span><span class="n">workload_summary</span><span class="p">;</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>┌──────────────┬──────────────────────────────────────────────────────────────────────────┬───────┬─────────────────────┬────────┐
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>│     sig      │                                   sql                                    │ runs  │      last_seen      │ avg_ms │
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>├──────────────┼──────────────────────────────────────────────────────────────────────────┼───────┼─────────────────────┼────────┤
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>│ 8c9d7175aab0 │ SELECT * FROM events WHERE account_id = 42 AND ts &gt;= DATE &#39;2026-01-01&#39;   │     2 │ 2026-03-22 16:44:06 │    0.0 │
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>│ 2af899d9dba6 │ SELECT count(*) FROM orders GROUP BY customer_id                         │     1 │ 2026-03-22 16:44:06 │    0.0 │
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>└──────────────┴──────────────────────────────────────────────────────────────────────────┴───────┴─────────────────────┴────────┘
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>┌──────────────┬──────────────────────────────────────────────────────────────────────────┬───────┬─────────────────────┬────────┐
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>│     sig      │                                   sql                                    │ runs  │      last_seen      │ avg_ms │
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>├──────────────┼──────────────────────────────────────────────────────────────────────────┼───────┼─────────────────────┼────────┤
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>│ 8c9d7175aab0 │ SELECT * FROM events WHERE account_id = 42 AND ts &gt;= DATE &#39;2026-01-01&#39;   │     2 │ 2026-03-22 16:44:06 │    0.0 │
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>│ 2af899d9dba6 │ SELECT count(*) FROM orders GROUP BY customer_id                         │     1 │ 2026-03-22 16:44:06 │    0.0 │
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>└──────────────┴──────────────────────────────────────────────────────────────────────────┴───────┴─────────────────────┴────────┘
 </code></pre></div>
 <h3 id="3-analyze-and-get-recommendations">3. Analyze and Get Recommendations<a class="headerlink" href="#3-analyze-and-get-recommendations" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_analyze</span><span class="p">();</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier</span><span class="p">.</span><span class="n">recommendations</span><span class="p">;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_analyze</span><span class="p">();</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier</span><span class="p">.</span><span class="n">recommendations</span><span class="p">;</span>
 </code></pre></div>
 <p>Each recommendation includes a kind, target table, SQL to execute, score, and confidence level.</p>
 <h3 id="4-apply-a-recommendation">4. Apply a Recommendation<a class="headerlink" href="#4-apply-a-recommendation" title="Permanent link">&para;</a></h3>
 <p>Preview first with a dry run:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_apply</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">dry_run</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="k">true</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_apply</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">dry_run</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="k">true</span><span class="p">);</span>
 </code></pre></div>
 <p>Then apply:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_apply</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_apply</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
 </code></pre></div>
 <h3 id="5-measure-the-impact">5. Measure the Impact<a class="headerlink" href="#5-measure-the-impact" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_benchmark</span><span class="p">(</span><span class="s1">&#39;select * from events where account_id = 42&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">);</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_compare</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_benchmark</span><span class="p">(</span><span class="s1">&#39;select * from events where account_id = 42&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">);</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_compare</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
 </code></pre></div>
 <h2 id="persistent-state">Persistent State<a class="headerlink" href="#persistent-state" title="Permanent link">&para;</a></h2>
 <p>By default, Vizier state is in-memory. To persist across sessions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1">-- Initialize with a state file</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_init</span><span class="p">(</span><span class="s1">&#39;/path/to/vizier_state.db&#39;</span><span class="p">);</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1">-- Or configure the path (auto-loads on next extension init)</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="k">select</span><span class="w"> </span><span class="n">vizier_configure</span><span class="p">(</span><span class="s1">&#39;state_path&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;/path/to/vizier_state.db&#39;</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1">-- Initialize with a state file</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_init</span><span class="p">(</span><span class="s1">&#39;/path/to/vizier_state.db&#39;</span><span class="p">);</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1">-- Or configure the path (auto-loads on next extension init)</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="k">select</span><span class="w"> </span><span class="n">vizier_configure</span><span class="p">(</span><span class="s1">&#39;state_path&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;/path/to/vizier_state.db&#39;</span><span class="p">);</span>
 </code></pre></div>
 <p>You can also export and import state between environments:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_save</span><span class="p">(</span><span class="s1">&#39;/tmp/vizier_state.db&#39;</span><span class="p">);</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_load</span><span class="p">(</span><span class="s1">&#39;/tmp/vizier_state.db&#39;</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_save</span><span class="p">(</span><span class="s1">&#39;/tmp/vizier_state.db&#39;</span><span class="p">);</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_load</span><span class="p">(</span><span class="s1">&#39;/tmp/vizier_state.db&#39;</span><span class="p">);</span>
 </code></pre></div>
 <h2 id="bulk-capture">Bulk Capture<a class="headerlink" href="#bulk-capture" title="Permanent link">&para;</a></h2>
 <p>If you have a table with query logs:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_capture_bulk</span><span class="p">(</span><span class="s1">&#39;query_log&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;sql_text&#39;</span><span class="p">);</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_flush</span><span class="p">();</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_capture_bulk</span><span class="p">(</span><span class="s1">&#39;query_log&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;sql_text&#39;</span><span class="p">);</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_flush</span><span class="p">();</span>
 </code></pre></div>
 <h2 id="session-capture">Session Capture<a class="headerlink" href="#session-capture" title="Permanent link">&para;</a></h2>
 <p>Capture all queries in a session without calling <code>vizier_capture()</code> per query:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_start_capture</span><span class="p">();</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1">-- run your queries here</span>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_stop_capture</span><span class="p">();</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_start_capture</span><span class="p">();</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="c1">-- run your queries here</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_stop_capture</span><span class="p">();</span>
 </code></pre></div>
 <h2 id="import-from-profiling-output">Import from Profiling Output<a class="headerlink" href="#import-from-profiling-output" title="Permanent link">&para;</a></h2>
 <p>If you have a DuckDB JSON profiling file:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_import_profile</span><span class="p">(</span><span class="s1">&#39;/path/to/profile.json&#39;</span><span class="p">);</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_flush</span><span class="p">();</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_import_profile</span><span class="p">(</span><span class="s1">&#39;/path/to/profile.json&#39;</span><span class="p">);</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_flush</span><span class="p">();</span>
 </code></pre></div>
 
 
