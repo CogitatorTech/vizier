@@ -67,7 +67,7 @@
     
     
     
-    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="yellow" data-md-color-accent="amber">
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="amber">
   
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
@@ -123,7 +123,7 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="yellow" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
     
       <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
@@ -133,7 +133,7 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="yellow" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
     
       <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
@@ -419,7 +419,7 @@
   <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How it works
+        How It Works?
       
     </span>
   </a>
@@ -430,7 +430,7 @@
   <a href="#what-vizier-is-not" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What Vizier is not
+        What Vizier Is Not
       
     </span>
   </a>
@@ -449,10 +449,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
+  <a href="#table-of-contents" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Documentation
+        Table of Contents
       
     </span>
   </a>
@@ -589,7 +589,7 @@
   <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How it works
+        How It Works?
       
     </span>
   </a>
@@ -600,7 +600,7 @@
   <a href="#what-vizier-is-not" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What Vizier is not
+        What Vizier Is Not
       
     </span>
   </a>
@@ -619,10 +619,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
+  <a href="#table-of-contents" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Documentation
+        Table of Contents
       
     </span>
   </a>
@@ -650,10 +650,10 @@
 
 
 <h1 id="vizier">Vizier<a class="headerlink" href="#vizier" title="Permanent link">&para;</a></h1>
-<p>A database advisor and finetuner for DuckDB.</p>
+<p><strong>A database advisor and finetuner for DuckDB.</strong></p>
 <hr />
-<p>Vizier is a DuckDB extension that analyzes your query workload and recommends physical design changes:
-indexes, sort orders, Parquet layouts, and summary tables.</p>
+<p>Vizier is a DuckDB extension that analyzes your query workload and recommends physical design changes like indexes, sort orders, Parquet layouts,
+and summary tables to improve query performance.</p>
 <h2 id="why-vizier">Why Vizier?<a class="headerlink" href="#why-vizier" title="Permanent link">&para;</a></h2>
 <p>When you have a DuckDB database, you are on your own to figure out things like:</p>
 <ul>
@@ -663,10 +663,13 @@ indexes, sort orders, Parquet layouts, and summary tables.</p>
 <li>Are any of my indexes redundant?</li>
 <li>Which queries are my bottleneck?</li>
 </ul>
-<p>Tools like pg_qualstats (PostgreSQL) and Database Engine Tuning Advisor (SQL Server) solve these problems,
-but nothing equivalent exists for DuckDB. Vizier fills that gap.</p>
-<h2 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
-<p>You feed Vizier your workload and it tells you what to change:</p>
+<p>Tools like <a href="https://github.com/powa-team/pg_qualstats">pg_qualstats</a> (for PostgreSQL) and
+<a href="https://learn.microsoft.com/en-us/sql/relational-databases/performance/database-engine-tuning-advisor?view=sql-server-ver17">Database Engine Tuning Advisor</a>
+(for SQL Server) solve these problems, but nothing equivalent exists for DuckDB.
+Vizier aims to fill that gap.</p>
+<h2 id="how-it-works">How It Works?<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
+<p>You feed Vizier your workload (a collection of queries), and it tells you what to change in your database to make it run faster.</p>
+<p>The example below shows the typical workflow of using Vizier.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">-- Capture your real queries</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_capture</span><span class="p">(</span><span class="s1">&#39;select * from events where account_id = 42 and ts &gt;= date &#39;&#39;2026-01-01&#39;&#39;&#39;</span><span class="p">);</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_flush</span><span class="p">();</span>
@@ -674,19 +677,22 @@ but nothing equivalent exists for DuckDB. Vizier fills that gap.</p>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1">-- Get recommendations</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_analyze</span><span class="p">();</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier</span><span class="p">.</span><span class="n">recommendations</span><span class="p">;</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1">-- create index idx_events_account_id on events(account_id)</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1">-- rewrite events sorted by (account_id, ts) for scan pruning</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1">-- Create index idx_events_account_id on events(account_id)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1">-- Rewrite events sorted by (account_id, ts) for scan pruning</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1">-- Apply and measure</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1">-- Apply and measure the impact</span>
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_apply</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_benchmark</span><span class="p">(</span><span class="s1">&#39;select * from events where account_id = 42&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">);</span>
 </code></pre></div>
-<h2 id="what-vizier-is-not">What Vizier is not<a class="headerlink" href="#what-vizier-is-not" title="Permanent link">&para;</a></h2>
-<p>Vizier is not an auto-tuner. It does not rewrite your tables for you.
+<h2 id="what-vizier-is-not">What Vizier Is Not<a class="headerlink" href="#what-vizier-is-not" title="Permanent link">&para;</a></h2>
+<p>Vizier is not an auto-tuner.
+It does not rewrite your tables for you.
 It recommends changes, explains why, lets you dry-run, and measures the impact.
-You make the decision to apply.</p>
+So you make the decision to apply at the end.</p>
 <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
+<li>Fully cross-platform (Windows, Linux, macOS, and FreeBSD)</li>
+<li>Supports DuckDB version <code>1.2.0</code> or newer</li>
 <li>Query pattern and execution stat capture</li>
 <li>Physical design inspection (indexes, table sizes, cardinalities, and storage layout)</li>
 <li>Workload analysis with bottleneck detection</li>
@@ -696,7 +702,7 @@ You make the decision to apply.</p>
 <li>Persistent state across sessions</li>
 <li>Static HTML report generation</li>
 </ul>
-<h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
+<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="getting-started/">Getting Started</a></li>
 <li><a href="examples/">Examples</a></li>
