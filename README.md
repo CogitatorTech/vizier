@@ -3,8 +3,10 @@
 <h2>Vizier</h2>
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/CogitatorTech/vizier/tests.yml?label=tests&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/actions/workflows/tests.yml)
-[![Zig Version](https://img.shields.io/badge/Zig-0.15.2-orange?logo=zig&labelColor=282c34)](https://ziglang.org/download/)
+[![Benchmarks](https://img.shields.io/github/actions/workflow/status/CogitatorTech/vizier/benchmarks.yml?label=benchmarks&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/actions/workflows/benchmarks.yml)
 [![License](https://img.shields.io/badge/license-MIT-007ec6?label=license&style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/CogitatorTech/vizier/blob/main/LICENSE)
+[![Zig Version](https://img.shields.io/badge/Zig-0.15.2-orange?logo=zig&labelColor=282c34)](https://ziglang.org/download/)
+[![Release](https://img.shields.io/github/release/CogitatorTech/vizier.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/releases/latest)
 
 A database advisor and finetuner for DuckDB
 
@@ -12,66 +14,42 @@ A database advisor and finetuner for DuckDB
 
 ---
 
-Vizier is a DuckDB extension for analyzing and finetuning DuckDB databases.
-It provides a set of functions to capture query metadata, analyze workloads, inspect physical database and table design,
-and generate recommendations for improving performance.
 
-### Why Vizier?
+Vizier is a DuckDB extension that analyzes your query workload and recommends physical design changes like indexes, sort orders, Parquet layouts,
+and summary tables to improve query performance.
 
-Typically, when you have a DuckDB database, you're on your own to figure out things like:
+When you have a DuckDB database, you are on your own to figure out things like:
 
 - Which columns need indexes?
 - Should I rewrite my table sorted differently?
 - What sort order should my Parquet exports use?
 - Are any of my indexes redundant?
-- Which queries are my hottest bottleneck?
+- Which queries are my bottleneck?
 
-There are tools that can help with these in more systematic ways.
-For example, for PostgreSQL (like pg_qualstats and HypoPG) and SQL Server (Database Engine Tuning Advisor).
-But there is no equivalent for DuckDB (that I'm aware of).
-Vizier is a tool that aims to fill this gap.
-
-### How It Works?
-
-You feed it your workload (the queries you want to run), and it tells you what to change:
-
-```sql
--- Capture your real queries
-select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
-select * from vizier_flush();
-
--- Get recommendations
-select * from vizier_analyze();
-select * from vizier.recommendations;
--- → Create index idx_events_account_id on events(account_id)
--- → Rewrite events sorted by (account_id, ts) for scan pruning
-
--- Apply and measure
-select * from vizier_apply(1);
-select * from vizier_benchmark('select * from events where account_id = 42', 10);
-```
-
-### Who Should Use Vizier?
-
-1. Analytics teams with growing DuckDB databases who notice queries slowing down but don't know what indexes or sort orders would help
-2. Data engineers exporting to Parquet who want optimal sort order and partitioning without trial-and-error
-3. Anyone migrating to DuckDB from a database that had an advisor, so they expect this tooling to exist
-
-### What It is Not?
-
-It's not an auto-tuner.
-It doesn't magically rewrite your tables.
-It recommends, explains why, lets you dry-run, and measures the impact.
-But the user still has to make the decision to apply the recommendation.
+Tools like [pg_qualstats](https://github.com/powa-team/pg_qualstats) (for PostgreSQL) and
+[Database Engine Tuning Advisor](https://learn.microsoft.com/en-us/sql/relational-databases/performance/database-engine-tuning-advisor?view=sql-server-ver17)
+(for SQL Server) solve these problems, but nothing equivalent exists for DuckDB.
+Vizier aims to fill that gap.
 
 ### Features
 
-* Capture query patterns and execution stats
-* Inspect current physical design (indexes, table sizes, cardinalities, etc.)
-* Analyze the workload to find performance bottlenecks
-* Recommend changes (indexes, sort orders, Parquet layouts, summary tables, etc.)
-* Apply recommendations with dry-run support
-* Benchmark before and after applying changes
+- Fully cross-platform (Windows, Linux, macOS, and FreeBSD)
+- Supports DuckDB version `1.2.0` or newer
+- Query pattern and execution stat capture
+- Physical design inspection (indexes, table sizes, cardinalities, and storage layout)
+- Workload analysis with bottleneck detection
+- Index, sort order, Parquet layout, and summary table recommendations
+- Dry-run support and before/after benchmarking
+- Rollback for applied recommendations
+- Persistent state across sessions
+- Static HTML report generation
+
+See [ROADMAP.md](ROADMAP.md) for the list of implemented and planned features.
+
+> [!IMPORTANT]
+> This project is still in early development, so compatibility is not perfect.
+> Bugs and breaking changes are also expected.
+> Please use the [issues page](https://github.com/CogitatorTech/vizier/issues) to report bugs or request features.
 
 ---
 
@@ -123,43 +101,11 @@ Example output:
 └──────────────┴────────────────────────────────────────────────────────────────────────┴───────┴─────────────────────┴────────┘  
 ```
 
-#### Current API
+---
 
-| Function                              | Type           | Description                                                    |
-|---------------------------------------|----------------|----------------------------------------------------------------|
-| `vizier_version()`                    | Scalar         | Returns the Vizier version                                     |
-| `vizier_capture(sql)`                 | Table function | Captures a query (normalized and deduplicated)                 |
-| `vizier_capture_bulk(table, column)`  | Table function | Bulk capture SQL queries from a table column                   |
-| `vizier_start_capture()`              | Table function | Starts a capture session                                       |
-| `vizier_stop_capture()`               | Table function | Stops capture, imports logged queries, and flushes             |
-| `vizier_session_log(sql)`             | Scalar         | Logs a query to the active capture session                     |
-| `vizier_import_profile(path)`         | Table function | Imports queries from a DuckDB JSON profiling file              |
-| `vizier_flush()`                      | Table function | Persists captured queries to metadata tables                   |
-| `vizier_analyze()`                    | Table function | Runs all advisors and generates recommendations                |
-| `vizier_apply(id, dry_run => bool)`   | Table function | Executes a recommendation (or previews with `dry_run => true`) |
-| `vizier_apply_all(min_score, ...)`    | Table function | Applies all recommendations above a score threshold            |
-| `vizier_compare(id)`                  | Table function | Benchmarks before/after with plan capture                      |
-| `vizier_benchmark(sql, runs)`         | Table function | Runs a query N times and returns timing stats                  |
-| `vizier_rollback(action_id)`          | Table function | Reverses an applied recommendation using stored inverse SQL    |
-| `vizier_rollback_all()`               | Table function | Undoes all applied recommendations in reverse order            |
-| `vizier_replay()`                     | Table function | Re-runs all captured queries and measures timing               |
-| `vizier_save(path)`                   | Table function | Saves all Vizier state to a DuckDB file                        |
-| `vizier_load(path)`                   | Table function | Loads Vizier state from a previously saved file                |
-| `vizier_report(path)`                 | Table function | Generates a standalone HTML report                             |
-| `vizier_configure(key, value)`        | Scalar         | Updates a Vizier configuration setting                         |
-| `vizier.inspect_table(name)`          | Table macro    | Per-column view: type, size, storage info, predicate usage     |
-| `vizier.overview()`                   | Table macro    | All user tables with sizes, indexes, and predicate hotspots    |
-| `vizier.explain(id)`                  | Table macro    | Detailed reasoning for a recommendation                        |
-| `vizier.explain_human(id)`            | Table macro    | Natural language explanation for a recommendation              |
-| `vizier.score_breakdown(id)`          | Table macro    | Transparent scoring components for a recommendation            |
-| `vizier.compare(id)`                  | Table macro    | Before/after benchmark comparison view                         |
-| `vizier.analyze_table(name)`          | Table macro    | Recommendations filtered by table                              |
-| `vizier.analyze_workload(since, min)` | Table macro    | Workload queries filtered by time and execution count          |
-| `vizier.recommendations`              | View           | Pending recommendations ranked by score                        |
-| `vizier.workload_summary`             | View           | Summary of captured workload by frequency                      |
-| `vizier.change_history`               | View           | Applied changes with rollback availability                     |
-| `vizier.replay_summary`               | View           | Replay results with regression detection                       |
-| `vizier.settings`                     | Table          | Configuration key-value pairs                                  |
+### Documentation
+
+Check out the project documentation [here](https://cogitatortech.github.io/vizier/).
 
 ---
 

@@ -2630,41 +2630,46 @@ static void dashboard_bind(duckdb_bind_info info) {
 
   {
     // Query each dataset as JSON
-    char *recs_json = query_json(g_flush_conn,
+    char *recs_json = query_json(
+        g_flush_conn,
         "select coalesce(json_group_array(json_object("
         "'id', recommendation_id, 'kind', kind, 'table_name', table_name, "
         "'score', round(score, 3), 'confidence', round(confidence, 2), "
         "'reason', reason, 'sql', sql_text)), '[]') "
         "from vizier.recommendation_store where status = 'pending'");
 
-    char *wl_json = query_json(g_flush_conn,
+    char *wl_json = query_json(
+        g_flush_conn,
         "select coalesce(json_group_array(json_object("
         "'sig', query_signature, 'sql', sample_sql, "
         "'runs', execution_count, 'avg_ms', round(avg_time_ms, 2))), '[]') "
         "from vizier.workload_queries");
 
-    char *acts_json = query_json(g_flush_conn,
+    char *acts_json = query_json(
+        g_flush_conn,
         "select coalesce(json_group_array(json_object("
         "'id', action_id, 'sql', sql_text, "
         "'success', success, 'notes', notes, "
         "'can_rollback', case when inverse_sql != '' then true else false end"
         ")), '[]') from vizier.applied_actions");
 
-    char *rep_json = query_json(g_flush_conn,
-        "select coalesce(json_group_array(json_object("
-        "'sig', r.query_signature, 'sql', r.sample_sql, "
-        "'avg_ms', round(r.avg_ms, 2), "
-        "'verdict', case "
-        "  when w.avg_time_ms > 0 and r.avg_ms > w.avg_time_ms * 1.2 then 'regression' "
-        "  when w.avg_time_ms > 0 and r.avg_ms < w.avg_time_ms * 0.8 then 'improved' "
-        "  else 'stable' end"
-        ")), '[]') from vizier.replay_results r "
-        "left join vizier.workload_queries w "
-        "on r.query_signature = w.query_signature");
+    char *rep_json = query_json(
+        g_flush_conn, "select coalesce(json_group_array(json_object("
+                      "'sig', r.query_signature, 'sql', r.sample_sql, "
+                      "'avg_ms', round(r.avg_ms, 2), "
+                      "'verdict', case "
+                      "  when w.avg_time_ms > 0 and r.avg_ms > w.avg_time_ms * "
+                      "1.2 then 'regression' "
+                      "  when w.avg_time_ms > 0 and r.avg_ms < w.avg_time_ms * "
+                      "0.8 then 'improved' "
+                      "  else 'stable' end"
+                      ")), '[]') from vizier.replay_results r "
+                      "left join vizier.workload_queries w "
+                      "on r.query_signature = w.query_signature");
 
     // Build the combined JSON object
-    size_t total_len = strlen(recs_json) + strlen(wl_json) +
-                       strlen(acts_json) + strlen(rep_json) + 256;
+    size_t total_len = strlen(recs_json) + strlen(wl_json) + strlen(acts_json) +
+                       strlen(rep_json) + 256;
     char *data_json = (char *)malloc(total_len);
     snprintf(data_json, total_len,
              "{\"recommendations\":%s,\"workload\":%s,"

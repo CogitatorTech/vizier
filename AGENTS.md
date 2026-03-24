@@ -96,6 +96,8 @@ Multiple capture methods feed into the same `g_pending` buffer:
 - Avoid colorful adjectives and adverbs. Write "TCP proxy" not "lightweight TCP proxy", "scoring components" not "transparent scoring components".
 - Use noun phrases for checklist items, not imperative verbs. Write "redundant index detection" not "detect redundant indexes".
 - SQL keywords in prose should be backticked: `` `JOIN` ``, `` `EXPLAIN` ``, `` `CREATE INDEX` ``.
+- Headings in Markdown files must be in title case: "Build from Source" not "Build from source". Minor words (a, an, the, and, but, or, for, in, on,
+  at, to, by, of) stay lowercase unless they are the first word.
 
 ## Required Validation
 

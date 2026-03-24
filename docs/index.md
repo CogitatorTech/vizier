@@ -1,11 +1,11 @@
 # Vizier
 
-A database advisor and finetuner for DuckDB.
+**A database advisor and finetuner for DuckDB.**
 
 ---
 
-Vizier is a DuckDB extension that analyzes your query workload and recommends physical design changes:
-indexes, sort orders, Parquet layouts, and summary tables.
+Vizier is a DuckDB extension that analyzes your query workload and recommends physical design changes like indexes, sort orders, Parquet layouts,
+and summary tables to improve query performance.
 
 ## Why Vizier?
 
@@ -17,12 +17,16 @@ When you have a DuckDB database, you are on your own to figure out things like:
 - Are any of my indexes redundant?
 - Which queries are my bottleneck?
 
-Tools like pg_qualstats (PostgreSQL) and Database Engine Tuning Advisor (SQL Server) solve these problems,
-but nothing equivalent exists for DuckDB. Vizier fills that gap.
+Tools like [pg_qualstats](https://github.com/powa-team/pg_qualstats) (for PostgreSQL) and
+[Database Engine Tuning Advisor](https://learn.microsoft.com/en-us/sql/relational-databases/performance/database-engine-tuning-advisor?view=sql-server-ver17)
+(for SQL Server) solve these problems, but nothing equivalent exists for DuckDB.
+Vizier aims to fill that gap.
 
-## How it works
+## How It Works?
 
-You feed Vizier your workload and it tells you what to change:
+You feed Vizier your workload (a collection of queries), and it tells you what to change in your database to make it run faster.
+
+The example below shows the typical workflow of using Vizier.
 
 ```sql
 -- Capture your real queries
@@ -32,22 +36,25 @@ select * from vizier_flush();
 -- Get recommendations
 select * from vizier_analyze();
 select * from vizier.recommendations;
--- create index idx_events_account_id on events(account_id)
--- rewrite events sorted by (account_id, ts) for scan pruning
+-- Create index idx_events_account_id on events(account_id)
+-- Rewrite events sorted by (account_id, ts) for scan pruning
 
--- Apply and measure
+-- Apply and measure the impact
 select * from vizier_apply(1);
 select * from vizier_benchmark('select * from events where account_id = 42', 10);
 ```
 
-## What Vizier is not
+## What Vizier Is Not
 
-Vizier is not an auto-tuner. It does not rewrite your tables for you.
+Vizier is not an auto-tuner.
+It does not rewrite your tables for you.
 It recommends changes, explains why, lets you dry-run, and measures the impact.
-You make the decision to apply.
+So you make the decision to apply at the end.
 
 ## Features
 
+- Fully cross-platform (Windows, Linux, macOS, and FreeBSD)
+- Supports DuckDB version `1.2.0` or newer
 - Query pattern and execution stat capture
 - Physical design inspection (indexes, table sizes, cardinalities, and storage layout)
 - Workload analysis with bottleneck detection
@@ -57,7 +64,7 @@ You make the decision to apply.
 - Persistent state across sessions
 - Static HTML report generation
 
-## Documentation
+## Table of Contents
 
 - [Getting Started](getting-started.md)
 - [Examples](examples.md)

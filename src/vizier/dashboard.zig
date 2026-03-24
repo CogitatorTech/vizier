@@ -1,7 +1,6 @@
 /// HTML dashboard template for vizier_dashboard(path).
 /// The marker VIZIER_JSON_DATA gets replaced with a JSON object at runtime.
 /// This template is compiled into the extension binary — no external files needed.
-
 pub const template_before: [*:0]const u8 =
     \\<!DOCTYPE html>
     \\<html lang="en">

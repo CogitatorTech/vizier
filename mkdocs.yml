@@ -9,14 +9,14 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: yellow
+      primary: black
       accent: amber
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: yellow
+      primary: black
       accent: amber
       toggle:
         icon: material/brightness-4
@@ -57,4 +57,3 @@ markdown_extensions:
   - attr_list
   - toc:
       permalink: true
-

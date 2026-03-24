@@ -1,6 +1,6 @@
 # Examples
 
-## Index recommendations
+## Index Recommendations
 
 Capture queries with equality filters and let Vizier detect index candidates:
 
@@ -20,7 +20,7 @@ select * from vizier.recommendations;
 -- sql_text: create index idx_customers_email on customers(email)
 ```
 
-## Sort order recommendations
+## Sort Order Recommendations
 
 When queries repeatedly filter on the same column prefixes, Vizier recommends sorting the table
 for row-group pruning:
@@ -37,7 +37,7 @@ select * from vizier.recommendations;
 -- sql_text: create table events_sorted as select * from events order by account_id, ts
 ```
 
-## Redundant index detection
+## Redundant Index Detection
 
 If you have indexes where one is a prefix of another, Vizier flags the shorter one:
 
@@ -48,7 +48,7 @@ select * from vizier.recommendations where kind = 'drop_redundant_index';
 -- reason: prefix of idx_orders_customer_id_date
 ```
 
-## Parquet layout recommendations
+## Parquet Layout Recommendations
 
 For tables exported to Parquet, Vizier recommends sort orders and partitioning:
 
@@ -61,7 +61,7 @@ select * from vizier.recommendations where kind = 'parquet_partition';
 -- sql_text: copy events to 'events_partitioned' (format parquet, partition_by (region))
 ```
 
-## Summary table recommendations
+## Summary Table Recommendations
 
 When the same aggregation runs repeatedly, Vizier recommends a precomputed table:
 
@@ -75,7 +75,7 @@ select * from vizier_analyze();
 select * from vizier.recommendations where kind = 'create_summary_table';
 ```
 
-## Inspecting table design
+## Inspecting Table Design
 
 Review the physical design of a specific table:
 
@@ -92,7 +92,7 @@ For a database-wide overview:
 select * from vizier.overview();
 ```
 
-## Understanding a recommendation
+## Understanding a Recommendation
 
 Get the scoring breakdown for a recommendation:
 
@@ -104,7 +104,7 @@ select * from vizier.explain_human(1);
 
 `vizier.explain_human` returns a natural language explanation with estimated speedup and write overhead.
 
-## Batch apply with threshold
+## Batch Apply with Threshold
 
 Apply all recommendations above a minimum score:
 
@@ -136,7 +136,7 @@ Review what was applied and what can be rolled back:
 select * from vizier.change_history;
 ```
 
-## Workload replay
+## Workload Replay
 
 After applying changes, replay the captured workload to detect regressions:
 
@@ -162,7 +162,7 @@ select vizier_configure('benchmark_runs', '10');
 select vizier_configure('min_confidence', '0.6');
 ```
 
-## HTML report
+## HTML Report
 
 Generate a static HTML report of the current analysis:
 

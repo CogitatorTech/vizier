@@ -18,25 +18,22 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              # C Toolchain & Build
-              gcc
+              # Build
+              zig
               gnumake
 
-              # Linting, Formatting & Debugging
+              # Formatting
               clang-tools
-              cppcheck
-              valgrind
-              gdb
 
-              # Alternative tools you support
-              zig
-
-              # Development Utilities
-              pre-commit
+              # Testing and development
+              duckdb
 
               # Documentation
-              doxygen
-              (python3.withPackages (ps: with ps; [ mkdocs uv ]))
+              (python3.withPackages (ps: with ps; [ mkdocs ]))
+              uv
+
+              # Git hooks
+              pre-commit
             ];
           };
         }
@@ -48,24 +45,19 @@
         in
         {
           default = pkgs.stdenv.mkDerivation {
-            name = "rocket68";
+            name = "vizier";
             src = ./.;
 
+            nativeBuildInputs = [ pkgs.zig pkgs.gnumake ];
+
             buildPhase = ''
-              make all
+              export ZIG_GLOBAL_CACHE_DIR=$(mktemp -d)
+              make build-all
             '';
 
             installPhase = ''
-              mkdir -p $out/lib $out/include
-              if [ -f lib/librocket68.a ]; then
-                cp lib/librocket68.a $out/lib/
-              fi
-              if [ -f lib/librocket68.so ]; then
-                cp lib/librocket68.so $out/lib/
-              fi
-              if [ -d include ]; then
-                cp include/* $out/include/
-              fi
+              mkdir -p $out/lib
+              find zig-out/lib -name "*.duckdb_extension" -exec cp {} $out/lib/ \;
             '';
           };
         }

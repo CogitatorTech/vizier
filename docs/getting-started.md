@@ -1,8 +1,8 @@
 # Getting Started
 
-## Build from source
+## Build from Source
 
-Vizier requires Zig 0.15.2 and a DuckDB binary for testing.
+Vizier requires Zig 0.15.2 and a DuckDB binary (version `1.2.0` or newer) for testing.
 
 ```bash
 git clone --depth=1 https://github.com/CogitatorTech/vizier.git
@@ -18,17 +18,17 @@ make test
 make duckdb
 ```
 
-## Loading the extension
+## Loading the Extension
 
 ```sql
 load vizier;
 ```
 
-## Basic workflow
+## Basic Workflow
 
 Vizier follows a capture, analyze, and apply workflow.
 
-### 1. Capture queries
+### 1. Capture Queries
 
 Feed Vizier the queries you run against your database:
 
@@ -44,7 +44,7 @@ Flush captured queries to metadata tables:
 select * from vizier_flush();
 ```
 
-### 2. Review the workload
+### 2. Review the Workload
 
 ```sql
 select * from vizier.workload_summary;
@@ -59,7 +59,7 @@ select * from vizier.workload_summary;
 └──────────────┴──────────────────────────────────────────────────────────────────────────┴───────┴─────────────────────┴────────┘
 ```
 
-### 3. Analyze and get recommendations
+### 3. Analyze and Get Recommendations
 
 ```sql
 select * from vizier_analyze();
@@ -68,12 +68,12 @@ select * from vizier.recommendations;
 
 Each recommendation includes a kind, target table, SQL to execute, score, and confidence level.
 
-### 4. Apply a recommendation
+### 4. Apply a Recommendation
 
 Preview first with a dry run:
 
 ```sql
-select * from vizier_apply(1, dry_run => true);
+select * from vizier_apply(1, dry_run = > true);
 ```
 
 Then apply:
@@ -82,14 +82,14 @@ Then apply:
 select * from vizier_apply(1);
 ```
 
-### 5. Measure the impact
+### 5. Measure the Impact
 
 ```sql
 select * from vizier_benchmark('select * from events where account_id = 42', 10);
 select * from vizier_compare(1);
 ```
 
-## Persistent state
+## Persistent State
 
 By default, Vizier state is in-memory. To persist across sessions:
 
@@ -108,7 +108,7 @@ select * from vizier_save('/tmp/vizier_state.db');
 select * from vizier_load('/tmp/vizier_state.db');
 ```
 
-## Bulk capture
+## Bulk Capture
 
 If you have a table with query logs:
 
@@ -117,7 +117,7 @@ select * from vizier_capture_bulk('query_log', 'sql_text');
 select * from vizier_flush();
 ```
 
-## Session capture
+## Session Capture
 
 Capture all queries in a session without calling `vizier_capture()` per query:
 
@@ -127,7 +127,7 @@ select * from vizier_start_capture();
 select * from vizier_stop_capture();
 ```
 
-## Import from profiling output
+## Import from Profiling Output
 
 If you have a DuckDB JSON profiling file:
 

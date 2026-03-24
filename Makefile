@@ -25,7 +25,7 @@ SHELL         := /usr/bin/env bash
 ################################################################################
 
 .PHONY: all help build build-all rebuild test test-unit test-property test-integration release clean \
- lint format docs serve-docs install-deps duckdb-translate duckdb
+ lint format docs docs-serve install-deps duckdb-translate duckdb
 
 .DEFAULT_GOAL := help
 
