@@ -1,280 +1,171 @@
 # Examples
 
-These examples focus on common host-integration patterns.
-All snippets use only public headers.
+## Index recommendations
 
-## 1. Run a Small Program from Reset Vectors
+Capture queries with equality filters and let Vizier detect index candidates:
 
-This example initializes RAM, writes reset vectors, and runs until `STOP`.
+```sql
+load vizier;
 
-```c
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+-- Simulate a workload with repeated equality lookups
+select * from vizier_capture('select * from customers where email = ''alice@example.com''');
+select * from vizier_capture('select * from customers where email = ''bob@example.com''');
+select * from vizier_capture('select * from customers where email = ''carol@example.com''');
+select * from vizier_flush();
 
-#include "rocket68.h"
-
-int main(void) {
-    const u32 mem_size = 1024 * 1024;
-    u8* ram = calloc(mem_size, 1);
-    if (!ram) return 1;
-
-    M68kCpu cpu;
-    m68k_init(&cpu, ram, mem_size);
-
-    /* Reset vectors */
-    m68k_write_32(&cpu, 0x00000000, 0x0000FF00); /* SSP */
-    m68k_write_32(&cpu, 0x00000004, 0x00000100); /* PC  */
-
-    /* Program: NOP; STOP #$2700 */
-    m68k_write_16(&cpu, 0x00000100, 0x4E71);
-    m68k_write_16(&cpu, 0x00000102, 0x4E72);
-    m68k_write_16(&cpu, 0x00000104, 0x2700);
-
-    m68k_reset(&cpu);
-
-    while (!cpu.stopped) {
-        m68k_execute(&cpu, 32);
-    }
-
-    printf("Stopped at PC=0x%08X\n", m68k_get_pc(&cpu));
-
-    free(ram);
-    return 0;
-}
+-- Analyze and review
+select * from vizier_analyze();
+select * from vizier.recommendations;
+-- kind: create_index
+-- sql_text: create index idx_customers_email on customers(email)
 ```
 
-## 2. Start from Host-Controlled State
+## Sort order recommendations
 
-Use this when your platform sets CPU state directly instead of using vector table boot.
+When queries repeatedly filter on the same column prefixes, Vizier recommends sorting the table
+for row-group pruning:
 
-```c
-M68kCpu cpu;
-m68k_init(&cpu, ram, mem_size);
+```sql
+select * from vizier_capture('select * from events where account_id = 1 and ts >= ''2026-01-01''');
+select * from vizier_capture('select * from events where account_id = 2 and ts >= ''2026-02-01''');
+select * from vizier_capture('select * from events where account_id = 3 and ts between ''2026-01-01'' and ''2026-06-01''');
+select * from vizier_flush();
 
-m68k_set_ar(&cpu, 7, 0x0000FF00); /* A7/SP */
-m68k_set_sr(&cpu, 0x2700);         /* Supervisor mode */
-m68k_set_pc(&cpu, 0x00001000);
-
-for (int i = 0; i < 100 && !cpu.stopped; i++) {
-    m68k_step(&cpu);
-}
+select * from vizier_analyze();
+select * from vizier.recommendations;
+-- kind: rewrite_sorted_table
+-- sql_text: create table events_sorted as select * from events order by account_id, ts
 ```
 
-## 3. Interrupt Handling with `int_ack`
+## Redundant index detection
 
-`m68k_set_irq` sets a pending level (0-7). The core checks interrupts on step boundaries.
+If you have indexes where one is a prefix of another, Vizier flags the shorter one:
 
-```c
-#include "rocket68.h"
-
-static int my_int_ack(M68kCpu* cpu, int level) {
-    (void)cpu;
-    (void)level;
-
-    /* Return autovector (level 3 -> vector 27). */
-    return M68K_INT_ACK_AUTOVECTOR;
-}
-
-void setup_interrupt_demo(M68kCpu* cpu) {
-    m68k_set_int_ack_callback(cpu, my_int_ack);
-
-    /* Raise level-3 interrupt. */
-    m68k_set_irq(cpu, 3);
-
-    /* Run some time; interrupt will be taken if mask allows it. */
-    m68k_execute(cpu, 128);
-}
+```sql
+select * from vizier_analyze();
+select * from vizier.recommendations where kind = 'drop_redundant_index';
+-- sql_text: drop index idx_orders_customer_id
+-- reason: prefix of idx_orders_customer_id_date
 ```
 
-## 4. Model Wait States with `wait_bus`
+## Parquet layout recommendations
 
-`wait_bus` is called on memory reads, memory writes, and instruction fetches.
+For tables exported to Parquet, Vizier recommends sort orders and partitioning:
 
-```c
-#include "rocket68.h"
+```sql
+select * from vizier_analyze();
+select * from vizier.recommendations where kind = 'parquet_sort_order';
+-- sql_text: copy events to 'events.parquet' (format parquet, row_group_size 100000) order by account_id, ts
 
-static void wait_bus(M68kCpu* cpu, u32 address, M68kSize size) {
-    (void)address;
-    (void)size;
-
-    /* Add 2 extra cycles for each bus access. */
-    cpu->cycles_remaining -= 2;
-}
-
-void attach_wait_states(M68kCpu* cpu) {
-    m68k_set_wait_bus_callback(cpu, wait_bus);
-}
+select * from vizier.recommendations where kind = 'parquet_partition';
+-- sql_text: copy events to 'events_partitioned' (format parquet, partition_by (region))
 ```
 
-## 5. Track Access Context with `fc_callback`
+## Summary table recommendations
 
-Function-code callback reports whether access is user/supervisor and data/program.
+When the same aggregation runs repeatedly, Vizier recommends a precomputed table:
 
-```c
-#include <stdio.h>
-#include "rocket68.h"
+```sql
+select * from vizier_capture('select customer_id, sum(amount) from orders group by customer_id');
+select * from vizier_capture('select customer_id, sum(amount) from orders group by customer_id');
+select * from vizier_capture('select customer_id, sum(amount) from orders group by customer_id');
+select * from vizier_flush();
 
-static void fc_trace(M68kCpu* cpu, unsigned int fc) {
-    (void)cpu;
-
-    const char* name = "UNKNOWN";
-    if (fc == M68K_FC_USER_DATA) name = "USER_DATA";
-    else if (fc == M68K_FC_USER_PROG) name = "USER_PROG";
-    else if (fc == M68K_FC_SUPV_DATA) name = "SUPV_DATA";
-    else if (fc == M68K_FC_SUPV_PROG) name = "SUPV_PROG";
-
-    printf("FC: %s (%u)\n", name, fc);
-}
-
-void attach_fc_trace(M68kCpu* cpu) {
-    m68k_set_fc_callback(cpu, fc_trace);
-}
+select * from vizier_analyze();
+select * from vizier.recommendations where kind = 'create_summary_table';
 ```
 
-## 6. Use a Host Bus with Memory Callbacks
+## Inspecting table design
 
-Use this when you need mapped IO/peripherals instead of a flat RAM array.
+Review the physical design of a specific table:
 
-```c
-#include "rocket68.h"
-
-typedef struct {
-    u8 ram[64 * 1024];
-    u8 io_reg;
-} HostBus;
-
-static u8 bus_read8(M68kCpu* cpu, u32 addr) {
-    HostBus* bus = (HostBus*)cpu->memory; /* host-owned pointer convention */
-    addr &= 0x00FFFFFF;
-
-    if (addr == 0x00A10001) return bus->io_reg;  /* simple MMIO read */
-    if (addr < sizeof(bus->ram)) return bus->ram[addr];
-    return 0xFF;
-}
-
-static void bus_write8(M68kCpu* cpu, u32 addr, u8 value) {
-    HostBus* bus = (HostBus*)cpu->memory;
-    addr &= 0x00FFFFFF;
-
-    if (addr == 0x00A10001) {
-        bus->io_reg = value;  /* simple MMIO write */
-        return;
-    }
-    if (addr < sizeof(bus->ram)) {
-        bus->ram[addr] = value;
-    }
-}
-
-/* Width wrappers can use your own bus logic directly. */
-static u16 bus_read16(M68kCpu* cpu, u32 addr) {
-    return (u16)((bus_read8(cpu, addr) << 8) | bus_read8(cpu, addr + 1));
-}
-
-static u32 bus_read32(M68kCpu* cpu, u32 addr) {
-    return ((u32)bus_read16(cpu, addr) << 16) | bus_read16(cpu, addr + 2);
-}
-
-static void bus_write16(M68kCpu* cpu, u32 addr, u16 value) {
-    bus_write8(cpu, addr, (u8)(value >> 8));
-    bus_write8(cpu, addr + 1, (u8)value);
-}
-
-static void bus_write32(M68kCpu* cpu, u32 addr, u32 value) {
-    bus_write16(cpu, addr, (u16)(value >> 16));
-    bus_write16(cpu, addr + 2, (u16)value);
-}
-
-void attach_bus(M68kCpu* cpu, HostBus* bus) {
-    /* memory/memory_size can be repurposed for host state when callbacks are installed */
-    m68k_init(cpu, (u8*)bus, sizeof(*bus));
-
-    m68k_set_read8_callback(cpu, bus_read8);
-    m68k_set_read16_callback(cpu, bus_read16);
-    m68k_set_read32_callback(cpu, bus_read32);
-    m68k_set_write8_callback(cpu, bus_write8);
-    m68k_set_write16_callback(cpu, bus_write16);
-    m68k_set_write32_callback(cpu, bus_write32);
-}
+```sql
+select * from vizier.inspect_table('events');
 ```
 
-Note:
+This shows each column with its type, nullability, size, index count, and predicate usage
+from the captured workload.
 
-- When a callback for a given width is installed, Rocket68 dispatches through that callback for that width.
-- Pass `NULL` to any `m68k_set_*_callback` setter to fall back to flat-memory behavior for that width.
+For a database-wide overview:
 
-## 7. Save and Restore CPU Context
-
-Use this for save states or rewind.
-
-```c
-#include <stdlib.h>
-#include <string.h>
-#include "rocket68.h"
-
-void save_and_restore(M68kCpu* cpu) {
-    const unsigned int ctx_size = m68k_context_size();
-    void* blob = malloc(ctx_size);
-    if (!blob) return;
-
-    m68k_get_context(cpu, blob);
-
-    /* Run forward a bit. */
-    m68k_execute(cpu, 256);
-
-    /* Restore prior state. */
-    m68k_set_context(cpu, blob);
-
-    free(blob);
-}
+```sql
+select * from vizier.overview();
 ```
 
-Note:
+## Understanding a recommendation
 
-- `m68k_set_context` preserves the destination CPU's memory binding and installed callbacks.
-- Save-state data should be reused with the same Rocket68 build/config.
+Get the scoring breakdown for a recommendation:
 
-## 8. Load Programs from S-Record or Binary
-
-```c
-#include "rocket68.h"
-
-bool load_program(M68kCpu* cpu) {
-    if (!m68k_load_srec(cpu, "firmware.srec")) {
-        return false; /* File open failed. */
-    }
-
-    if (!m68k_load_bin(cpu, "overlay.bin", 0x00020000)) {
-        return false; /* File open failed. */
-    }
-
-    return true;
-}
+```sql
+select * from vizier.explain(1);
+select * from vizier.score_breakdown(1);
+select * from vizier.explain_human(1);
 ```
 
-Notes:
+`vizier.explain_human` returns a natural language explanation with estimated speedup and write overhead.
 
-- For loader edge-case behavior (malformed records, checksum policy, entry-point handling), see [API Reference](api-reference.md) and [Compatibility Notes](compatibility.md).
+## Batch apply with threshold
 
-## 9. Disassemble Memory for Debug Output
+Apply all recommendations above a minimum score:
 
-```c
-#include <stdio.h>
-#include "rocket68.h"
+```sql
+-- Preview what would be applied
+select * from vizier_apply_all(min_score => 0.7, max_actions => 10, dry_run => true);
 
-void dump_disasm(M68kCpu* cpu, u32 pc, int count) {
-    for (int i = 0; i < count; i++) {
-        char text[128];
-        int used = m68k_disasm(cpu, pc, text, (int)sizeof(text));
-
-        printf("%08X: %s\n", pc, text);
-
-        if (used <= 0) {
-            break;
-        }
-        pc += (u32)used;
-    }
-}
+-- Apply
+select * from vizier_apply_all(min_score => 0.7, max_actions => 10, dry_run => false);
 ```
 
-For disassembly return semantics, see [API Reference](api-reference.md).
+## Rollback
+
+Undo a single applied recommendation:
+
+```sql
+select * from vizier_rollback(1);
+```
+
+Or undo all applied recommendations in reverse order:
+
+```sql
+select * from vizier_rollback_all();
+```
+
+Review what was applied and what can be rolled back:
+
+```sql
+select * from vizier.change_history;
+```
+
+## Workload replay
+
+After applying changes, replay the captured workload to detect regressions:
+
+```sql
+select * from vizier_replay();
+select * from vizier.replay_summary;
+select * from vizier.replay_totals;
+```
+
+Replay only queries that touch a specific table:
+
+```sql
+select * from vizier_replay(table_name => 'events');
+```
+
+## Configuration
+
+View and update settings:
+
+```sql
+select * from vizier.settings;
+select vizier_configure('benchmark_runs', '10');
+select vizier_configure('min_confidence', '0.6');
+```
+
+## HTML report
+
+Generate a static HTML report of the current analysis:
+
+```sql
+select * from vizier_report('/tmp/vizier_report.html');
+```

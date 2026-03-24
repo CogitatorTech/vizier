@@ -110,3 +110,4 @@ duckdb
 NOTES.md
 .claude/
 *.parquet
+site/

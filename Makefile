@@ -138,13 +138,15 @@ format: ## Format Zig and C files
 		echo "clang-format not found, skipping C formatting"; \
 	fi
 
-docs: ## Generate API documentation
-	@echo "Generating API documentation..."
-	@$(ZIG) build docs
+.PHONY: docs
+docs: ## Generate project documentation (MkDocs)
+	@echo "Generating documentation..."
+	mkdocs build
 
-serve-docs: docs  ## Serve the generated documentation on a local server
-	@echo "Serving API documentation at http://localhost:8000"
-	@cd docs/api && python3 -m http.server 8000
+.PHONY: docs-serve
+docs-serve: docs ## Serve project docs (MkDocs) locally
+	@echo "Serving documentation locally..."
+	python -m http.server --directory ./site
 
 duckdb-translate: ## Regenerate Zig bindings from DuckDB C API headers
 	@echo "Generating DuckDB Zig bindings..."

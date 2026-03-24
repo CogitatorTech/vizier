@@ -1,258 +1,450 @@
 # API Reference
 
-This page documents the public C API in:
+## Scalar functions
 
-- `include/m68k.h`
-- `include/loader.h`
-- `include/disasm.h`
-- `include/rocket68.h`
+### `vizier_version()`
 
-## Header Usage
+Returns the Vizier extension version string.
 
-Include the umbrella header:
-
-```c
-#include "rocket68.h"
+```sql
+select vizier_version();
 ```
 
-Or include only what you need:
+### `vizier_configure(key, value)`
 
-```c
-#include "m68k.h"
-#include "loader.h"
-#include "disasm.h"
+Updates a setting in the `vizier.settings` table. Returns the new value.
+
+```sql
+select vizier_configure('benchmark_runs', '10');
 ```
 
-## Core Types
+### `vizier_session_log(sql)`
 
-### Integer aliases
+Logs a query to the active capture session. Used between `vizier_start_capture()` and `vizier_stop_capture()`.
 
-- `u8`, `u16`, `u32`
-- `s8`, `s16`, `s32`
-
-### `M68kSize`
-
-```c
-typedef enum { SIZE_BYTE = 1, SIZE_WORD = 2, SIZE_LONG = 4 } M68kSize;
+```sql
+select vizier_session_log('select * from events where id = 1');
 ```
 
-### `M68kRegister`
+## Table functions
 
-Register union used for `D0-D7` and `A0-A7`.
-`w` maps to the low 16 bits of `l`.
+### `vizier_init(path)`
 
-### `M68kCpu`
+Initializes the Vizier schema and metadata tables. If `path` is provided, sets the persistent state file.
 
-One complete CPU instance with registers, execution state, memory binding, and callbacks.
-`d_regs` is aligned to 64 bytes.
+```sql
+select * from vizier_init('/path/to/state.db');
+```
 
-### Host memory callback types
+### `vizier_capture(sql)`
 
-- `M68kRead8Callback`
-- `M68kRead16Callback`
-- `M68kRead32Callback`
-- `M68kWrite8Callback`
-- `M68kWrite16Callback`
-- `M68kWrite32Callback`
+Captures a single query for workload analysis. The query is normalized (literals replaced with `?`, keywords uppercased, and whitespace collapsed) and deduplicated by signature.
 
-## Status Register Flags
+```sql
+select * from vizier_capture('select * from events where account_id = 42');
+```
 
-- `M68K_SR_C` carry
-- `M68K_SR_V` overflow
-- `M68K_SR_Z` zero
-- `M68K_SR_N` negative
-- `M68K_SR_X` extend
-- `M68K_SR_S` supervisor mode
+### `vizier_capture_bulk(table, column)`
 
-## Function Code Constants
+Reads SQL statements from a table column and captures them.
 
-- `M68K_FC_USER_DATA`
-- `M68K_FC_USER_PROG`
-- `M68K_FC_SUPV_DATA`
-- `M68K_FC_SUPV_PROG`
-- `M68K_FC_INT_ACK`
+```sql
+select * from vizier_capture_bulk('query_log', 'sql_text');
+```
 
-## Interrupt ACK Constants
+### `vizier_start_capture()`
 
-- `M68K_INT_ACK_AUTOVECTOR`
-- `M68K_INT_ACK_SPURIOUS`
+Starts session-based capture. Queries logged via `vizier_session_log()` are buffered until `vizier_stop_capture()` is called.
 
-## Lifecycle and State
+```sql
+select * from vizier_start_capture();
+```
 
-### `void m68k_init(M68kCpu* cpu, u8* memory, u32 memory_size);`
+### `vizier_stop_capture()`
 
-Initializes all CPU fields and binds a flat memory buffer.
-If host memory callbacks are installed later, read/write API calls dispatch through callbacks instead of this flat buffer.
+Stops session capture, imports logged queries, and flushes them to metadata tables.
 
-### `void m68k_reset(M68kCpu* cpu);`
+```sql
+select * from vizier_stop_capture();
+```
 
-Performs reset-state initialization and loads:
+### `vizier_import_profile(path)`
 
-- initial SSP from `0x00000000`
-- initial PC from `0x00000004`
+Imports queries from a DuckDB JSON profiling output file.
 
-### `void m68k_set_pc(M68kCpu* cpu, u32 pc);`
+```sql
+select * from vizier_import_profile('/path/to/profile.json');
+```
 
-Sets PC and triggers `pc_changed` callback if installed.
+### `vizier_flush()`
 
-### `u32 m68k_get_pc(M68kCpu* cpu);`
+Persists all captured queries from the in-memory buffer to the `vizier.workload_queries` and `vizier.workload_predicates` tables. Also populates `tables_json`, `columns_json`, and selectivity data.
 
-Returns PC.
+```sql
+select * from vizier_flush();
+```
 
-### `void m68k_set_sr(M68kCpu* cpu, u16 new_sr);`
+### `vizier_analyze()`
 
-Sets SR with masking (`0xA71F`) and performs USP/SSP swap when supervisor state changes.
+Runs all advisors on the captured workload and populates `vizier.recommendation_store`. The advisors are:
 
-### `void m68k_set_irq(M68kCpu* cpu, int level);`
+| Advisor | Recommendation kind | Description |
+|---|---|---|
+| Index | `create_index` | ART indexes for selective equality and join predicates |
+| Sort | `rewrite_sorted_table` | Table rewrites with better row order for scan pruning |
+| Redundant index | `drop_redundant_index` | Indexes that are a prefix of another index |
+| Parquet sort | `parquet_sort_order` | Sort order for Parquet exports |
+| Parquet partition | `parquet_partition` | Partitioning strategy for Parquet exports |
+| Parquet row group | `parquet_row_group_size` | Row group size for Parquet exports |
+| Summary table | `create_summary_table` | Precomputed rollup tables for repeated aggregations |
+| Join path | `sort_for_join` | Sort by join key for merge-join compatibility |
+| No action | `no_action` | Tables in the workload with no pending recommendations |
 
-Sets pending interrupt level (0-7).
+```sql
+select * from vizier_analyze();
+```
 
-### Register accessors
+### `vizier_apply(id, dry_run)`
 
-- `void m68k_set_dr(M68kCpu* cpu, int reg, u32 value);`
-- `u32 m68k_get_dr(M68kCpu* cpu, int reg);`
-- `void m68k_set_ar(M68kCpu* cpu, int reg, u32 value);`
-- `u32 m68k_get_ar(M68kCpu* cpu, int reg);`
+Executes a recommendation from `vizier.recommendation_store`. With `dry_run => true`, shows the SQL without executing.
 
-Invalid register indexes are ignored on set and return `0` on get.
+```sql
+select * from vizier_apply(1);
+select * from vizier_apply(1, dry_run => true);
+```
 
-## Execution API
+### `vizier_apply_all(min_score, max_actions, dry_run)`
 
-### `void m68k_step_ex(M68kCpu* cpu, bool check_exceptions);`
+Applies all pending recommendations above a score threshold.
 
-Executes one instruction with optional interrupt/trace checks.
+| Parameter | Type | Description |
+|---|---|---|
+| `min_score` | double | Minimum score (0 to 1) |
+| `max_actions` | bigint | Maximum recommendations to apply |
+| `dry_run` | boolean | Preview without executing |
 
-### `void m68k_step(M68kCpu* cpu);`
+```sql
+select * from vizier_apply_all(min_score => 0.7, max_actions => 5, dry_run => false);
+```
 
-Equivalent to `m68k_step_ex(cpu, true)`.
+### `vizier_rollback(action_id)`
 
-### `int m68k_execute(M68kCpu* cpu, int cycles);`
+Reverses a single applied recommendation by executing its stored inverse SQL.
 
-Adds `cycles` to the timeslice, runs until `cycles_remaining <= 0`, and returns consumed cycles for this call.
+```sql
+select * from vizier_rollback(1);
+```
 
-### Timeslice helpers
+### `vizier_rollback_all()`
 
-- `int m68k_cycles_run(M68kCpu* cpu);`
-- `int m68k_cycles_remaining(M68kCpu* cpu);`
-- `void m68k_modify_timeslice(M68kCpu* cpu, int cycles);`
-- `void m68k_end_timeslice(M68kCpu* cpu);`
+Undoes all applied recommendations in reverse order.
 
-## Memory API
+```sql
+select * from vizier_rollback_all();
+```
 
-All memory accesses are big-endian.
-Addresses are masked to 24-bit internally before bounds checks.
+### `vizier_benchmark(sql, runs)`
 
-### Reads
+Runs a query multiple times and returns timing statistics.
 
-- `u8  m68k_read_8(M68kCpu* cpu, u32 address);`
-- `u16 m68k_read_16(M68kCpu* cpu, u32 address);`
-- `u32 m68k_read_32(M68kCpu* cpu, u32 address);`
+```sql
+select * from vizier_benchmark('select count(*) from events', 10);
+```
 
-### Writes
+### `vizier_compare(id)`
 
-- `void m68k_write_8(M68kCpu* cpu, u32 address, u8 value);`
-- `void m68k_write_16(M68kCpu* cpu, u32 address, u16 value);`
-- `void m68k_write_32(M68kCpu* cpu, u32 address, u32 value);`
+Benchmarks a recommendation's target queries before and after applying. Captures `EXPLAIN` plans for both.
 
-Behavior notes:
+```sql
+select * from vizier_compare(1);
+```
 
-- If a host memory callback is installed for the requested width, it is called first.
-- When callbacks are used, default flat-buffer address/alignment/bus-error checks for that access are bypassed and are expected to be handled by the host.
-- Word/long accesses on odd addresses trigger address error handling.
-- Out-of-range accesses trigger bus error handling.
+### `vizier_replay(table_name)`
 
-## Callback API
+Re-runs all captured queries and records timing in `vizier.replay_results`. Optionally filtered by table.
 
-All callbacks are per-instance.
+```sql
+select * from vizier_replay();
+select * from vizier_replay(table_name => 'events');
+```
 
-### `void m68k_set_wait_bus_callback(M68kCpu* cpu, M68kWaitBusCallback callback);`
+### `vizier_save(path)`
 
-Called before each memory/fetch bus access.
+Saves all Vizier state to a DuckDB file.
 
-### `void m68k_set_int_ack_callback(M68kCpu* cpu, M68kIntAckCallback callback);`
+```sql
+select * from vizier_save('/tmp/vizier_state.db');
+```
 
-Called when an interrupt is acknowledged.
-Return vector number, `M68K_INT_ACK_AUTOVECTOR`, or `M68K_INT_ACK_SPURIOUS`.
+### `vizier_load(path)`
 
-### `void m68k_set_fc_callback(M68kCpu* cpu, M68kFcCallback callback);`
+Loads Vizier state from a previously saved file.
 
-Called before bus/program accesses with the active FC value.
+```sql
+select * from vizier_load('/tmp/vizier_state.db');
+```
 
-### `void m68k_set_instr_hook_callback(M68kCpu* cpu, M68kInstrHookCallback callback);`
+### `vizier_report(path)`
 
-Called before each instruction decode/execute (not during STOP-idle cycles).
+Generates a standalone HTML report.
 
-### `void m68k_set_pc_changed_callback(M68kCpu* cpu, M68kPcChangedCallback callback);`
+```sql
+select * from vizier_report('/tmp/report.html');
+```
 
-Called when PC changes through `m68k_set_pc`.
+### `vizier_dashboard(path)`
 
-### `void m68k_set_reset_callback(M68kCpu* cpu, M68kResetCallback callback);`
+Generates an interactive HTML dashboard.
 
-Called by execution of the `RESET` instruction.
-This is separate from `m68k_reset()`.
+```sql
+select * from vizier_dashboard('/tmp/dashboard.html');
+```
 
-### `void m68k_set_tas_callback(M68kCpu* cpu, M68kTasCallback callback);`
+## Views
 
-Called by `TAS`; non-zero return allows write-back, zero blocks write-back.
+### `vizier.recommendations`
 
-### `void m68k_set_illg_callback(M68kCpu* cpu, M68kIllgCallback callback);`
+Pending recommendations ranked by score.
 
-Registers an illegal-opcode callback pointer.
-Current core decode path does not invoke this callback yet.
+| Column | Type | Description |
+|---|---|---|
+| `recommendation_id` | integer | Unique ID |
+| `kind` | varchar | Recommendation type |
+| `table_name` | varchar | Target table |
+| `columns_json` | varchar | Affected columns (JSON) |
+| `score` | double | Recommendation score (0 to 1) |
+| `confidence` | double | Confidence level (0 to 1) |
+| `reason` | varchar | Why this was recommended |
+| `sql_text` | varchar | SQL to execute |
+| `status` | varchar | pending, applied, or rolled_back |
+| `estimated_gain` | varchar | Estimated performance improvement |
+| `estimated_build_cost` | varchar | Cost to build (like index creation time) |
+| `estimated_maintenance_cost` | varchar | Ongoing cost (like write overhead) |
 
-### Host memory callbacks
+### `vizier.workload_summary`
 
-- `void m68k_set_read8_callback(M68kCpu* cpu, M68kRead8Callback callback);`
-- `void m68k_set_read16_callback(M68kCpu* cpu, M68kRead16Callback callback);`
-- `void m68k_set_read32_callback(M68kCpu* cpu, M68kRead32Callback callback);`
-- `void m68k_set_write8_callback(M68kCpu* cpu, M68kWrite8Callback callback);`
-- `void m68k_set_write16_callback(M68kCpu* cpu, M68kWrite16Callback callback);`
-- `void m68k_set_write32_callback(M68kCpu* cpu, M68kWrite32Callback callback);`
+Summary of captured queries ordered by execution count.
 
-Use these to route memory access to a host bus implementation (for mapped IO/peripherals or custom memory models).
-Pass `NULL` to disable a callback and fall back to default flat-memory behavior for that access width.
+| Column | Type | Description |
+|---|---|---|
+| `sig` | varchar | Query signature hash |
+| `sql` | varchar | Sample SQL |
+| `runs` | integer | Execution count |
+| `last_seen` | varchar | Last capture timestamp |
+| `avg_ms` | double | Average execution time |
 
-## Context Save/Restore
+### `vizier.change_history`
 
-### `unsigned int m68k_context_size(void);`
+Applied changes with rollback availability.
 
-Returns context blob size in bytes.
+| Column | Type | Description |
+|---|---|---|
+| `action_id` | integer | Action ID |
+| `recommendation_id` | integer | Source recommendation |
+| `kind` | varchar | Recommendation type |
+| `table_name` | varchar | Target table |
+| `sql_text` | varchar | SQL that was executed |
+| `inverse_sql` | varchar | SQL to undo |
+| `success` | boolean | Whether execution succeeded |
+| `applied_at` | varchar | Timestamp |
+| `can_rollback` | boolean | Whether rollback is available |
 
-### `void m68k_get_context(M68kCpu* cpu, void* dst);`
+### `vizier.replay_summary`
 
-Copies CPU context into `dst` (`m68k_context_size()` bytes).
+Replay results with regression detection.
 
-### `void m68k_set_context(M68kCpu* cpu, const void* src);`
+| Column | Type | Description |
+|---|---|---|
+| `query_signature` | varchar | Query signature hash |
+| `sample_sql` | varchar | Sample SQL |
+| `avg_ms` | double | Replay average time |
+| `status` | varchar | Execution status |
+| `verdict` | varchar | improved, stable, or regression |
 
-Restores context from `src`, while preserving destination-instance runtime bindings:
+### `vizier.replay_totals`
 
-- memory pointer and memory size
-- internal fault trap storage
-- installed callbacks
+Aggregate replay metrics.
 
-## Loader API (`loader.h`)
+| Column | Type | Description |
+|---|---|---|
+| `queries_replayed` | integer | Number of queries replayed |
+| `replay_total_ms` | double | Total replay time |
+| `baseline_total_ms` | double | Total baseline time |
+| `ratio` | double | Replay time / baseline time |
+| `overall_verdict` | varchar | improved, stable, or regression |
 
-### `bool m68k_load_srec(M68kCpu* cpu, const char* filename);`
+## Table macros
 
-Loads Motorola S-record data into memory.
-Returns `false` only when the file cannot be opened.
-Malformed records are reported to `stderr` and skipped.
-Entry-point records (`S7/S8/S9`) set `cpu->pc` directly.
+### `vizier.inspect_table(name)`
 
-### `bool m68k_load_bin(M68kCpu* cpu, const char* filename, u32 address);`
+Per-column view of a table showing type, nullability, size, index count, and predicate usage from the captured workload.
 
-Loads raw binary bytes into memory starting at `address`.
-Returns `false` only when the file cannot be opened.
+```sql
+select * from vizier.inspect_table('events');
+```
 
-## Disassembler API (`disasm.h`)
+### `vizier.overview()`
 
-### `int m68k_disasm(M68kCpu* cpu, u32 pc, char* buffer, int buf_size);`
+All user tables with sizes, index counts, and predicate hotspots.
 
-Disassembles one instruction at `pc` into `buffer`.
-Returns number of bytes consumed by that instruction.
+```sql
+select * from vizier.overview();
+```
 
-## Version
+### `vizier.explain(id)`
 
-### `ROCKET68_VERSION_STR`
+Full details of a single recommendation.
 
-Semantic version string in `include/rocket68.h`.
+```sql
+select * from vizier.explain(1);
+```
+
+### `vizier.explain_human(id)`
+
+Natural language explanation with estimated speedup and write overhead.
+
+```sql
+select * from vizier.explain_human(1);
+```
+
+### `vizier.score_breakdown(id)`
+
+Per-predicate scoring breakdown showing how each column contributes to the score.
+
+```sql
+select * from vizier.score_breakdown(1);
+```
+
+### `vizier.compare(id)`
+
+Before/after benchmark comparison with verdict (excellent, good, marginal, or regression).
+
+```sql
+select * from vizier.compare(1);
+```
+
+### `vizier.analyze_table(name)`
+
+Pending recommendations filtered to a single table.
+
+```sql
+select * from vizier.analyze_table('events');
+```
+
+### `vizier.analyze_workload(since, min_executions)`
+
+Captured queries filtered by time and minimum execution count.
+
+```sql
+select * from vizier.analyze_workload('2026-01-01', 5);
+```
+
+## Metadata tables
+
+### `vizier.workload_queries`
+
+Captured query patterns with execution statistics.
+
+| Column | Type | Description |
+|---|---|---|
+| `query_signature` | varchar | Normalized query hash |
+| `normalized_sql` | varchar | Normalized SQL (literals replaced with `?`) |
+| `sample_sql` | varchar | Original SQL sample |
+| `first_seen` | varchar | First capture timestamp |
+| `last_seen` | varchar | Last capture timestamp |
+| `execution_count` | integer | Number of times captured |
+| `total_time_ms` | double | Total execution time |
+| `avg_time_ms` | double | Average execution time |
+| `p95_time_ms` | double | 95th percentile execution time |
+| `tables_json` | varchar | Referenced tables (JSON) |
+| `columns_json` | varchar | Referenced columns (JSON) |
+
+### `vizier.workload_predicates`
+
+Predicates extracted from captured queries.
+
+| Column | Type | Description |
+|---|---|---|
+| `query_signature` | varchar | Source query signature |
+| `table_name` | varchar | Table referenced |
+| `column_name` | varchar | Column referenced |
+| `predicate_kind` | varchar | equality, range, in_list, like, or group_by |
+| `frequency` | integer | How often this predicate appears |
+| `avg_selectivity` | double | Estimated selectivity (0 to 1) |
+
+### `vizier.recommendation_store`
+
+All generated recommendations. Same columns as the `vizier.recommendations` view, but includes all statuses (not just pending).
+
+### `vizier.applied_actions`
+
+Audit log of applied recommendations.
+
+| Column | Type | Description |
+|---|---|---|
+| `action_id` | integer | Unique action ID |
+| `recommendation_id` | integer | Source recommendation |
+| `applied_at` | varchar | Timestamp |
+| `sql_text` | varchar | SQL that was executed |
+| `inverse_sql` | varchar | SQL to undo |
+| `success` | boolean | Whether execution succeeded |
+| `notes` | varchar | Status notes |
+
+### `vizier.benchmark_results`
+
+Benchmark comparison results.
+
+| Column | Type | Description |
+|---|---|---|
+| `benchmark_id` | integer | Unique benchmark ID |
+| `recommendation_id` | integer | Source recommendation |
+| `query_signature` | varchar | Query tested |
+| `baseline_ms` | double | Baseline timing |
+| `candidate_ms` | double | Post-change timing |
+| `speedup` | double | baseline_ms / candidate_ms |
+| `plan_before` | varchar | `EXPLAIN` plan before |
+| `plan_after` | varchar | `EXPLAIN` plan after |
+| `recorded_at` | varchar | Timestamp |
+
+### `vizier.replay_results`
+
+Per-query replay results.
+
+| Column | Type | Description |
+|---|---|---|
+| `replay_id` | integer | Unique replay ID |
+| `query_signature` | varchar | Query signature |
+| `sample_sql` | varchar | Sample SQL |
+| `avg_ms` | double | Replay average time |
+| `status` | varchar | Execution status |
+| `replayed_at` | varchar | Timestamp |
+
+### `vizier.session_log`
+
+Queries captured during a session.
+
+| Column | Type | Description |
+|---|---|---|
+| `sql_text` | varchar | Captured SQL |
+| `captured_at` | varchar | Timestamp |
+
+## Settings
+
+Default configuration values in `vizier.settings`:
+
+| Key | Default | Description |
+|---|---|---|
+| `min_query_count` | 1 | Minimum query frequency before generating recommendations |
+| `min_confidence` | 0.4 | Minimum confidence threshold |
+| `benchmark_runs` | 5 | Default benchmark iterations |
+| `max_pending_captures` | 4096 | Maximum queries in capture buffer |
+| `auto_flush` | false | Flush after each capture |
+| `state_path` | (empty) | Auto-save/load state file path |
+| `index_score_divisor` | 10 | Index advisor score divisor |
+| `sort_score_divisor` | 20 | Sort advisor score divisor |
+| `sort_min_predicates` | 2 | Minimum predicates before sort advisor fires |
+| `large_table_bytes` | 100000000 | Table size threshold for maintenance cost warnings |
+| `compare_bench_runs` | 5 | Benchmark runs for `vizier_compare` |
+| `cost_weight_time` | 1.0 | Weight for query time impact in scoring |
+| `cost_weight_frequency` | 1.0 | Weight for query frequency in scoring |
+| `cost_weight_selectivity` | 1.5 | Boost for high-selectivity columns in scoring |

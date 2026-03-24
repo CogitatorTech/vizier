@@ -1,118 +1,137 @@
 # Getting Started
 
-This page shows the smallest path from source files to a running 68000 program.
+## Build from source
 
-## 1. Build and Link
-
-### Option A: Compile core sources directly
+Vizier requires Zig 0.15.2 and a DuckDB binary for testing.
 
 ```bash
-gcc -std=c11 -O3 -Iinclude src/m68k/*.c your_app.c -o your_app
+git clone --depth=1 https://github.com/CogitatorTech/vizier.git
+cd vizier
+
+# Build the extension
+make build-all
+
+# Run tests (needs DuckDB in PATH)
+make test
+
+# Try Vizier interactively (needs DuckDB in PATH)
+make duckdb
 ```
 
-### Option B: Build library with Make
+## Loading the extension
 
-```bash
-BUILD_TYPE=release make static
-# Produces lib/librocket68.a
+```sql
+load vizier;
 ```
 
-Then link your app:
+## Basic workflow
 
-```bash
-gcc -std=c11 -O2 -Iinclude your_app.c lib/librocket68.a -o your_app
+Vizier follows a capture, analyze, and apply workflow.
+
+### 1. Capture queries
+
+Feed Vizier the queries you run against your database:
+
+```sql
+select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
+select * from vizier_capture('select count(*) from orders group by customer_id');
+select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
 ```
 
-## 2. Minimal Runnable Program
+Flush captured queries to metadata tables:
 
-This example:
-
-1. Creates CPU + RAM
-2. Writes reset vectors (`SSP` at `0x00000000`, `PC` at `0x00000004`)
-3. Writes a tiny program (`NOP`, then `STOP #$2700`)
-4. Runs until STOP
-
-```c
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "m68k.h"
-
-int main(void) {
-    const u32 mem_size = 1024 * 1024;
-    u8* ram = calloc(mem_size, 1);
-    if (!ram) return 1;
-
-    M68kCpu cpu;
-    m68k_init(&cpu, ram, mem_size);
-
-    /* Reset vectors */
-    m68k_write_32(&cpu, 0x00000000, 0x0000FF00); /* initial SSP */
-    m68k_write_32(&cpu, 0x00000004, 0x00000100); /* initial PC  */
-
-    /* Program at 0x100: NOP; STOP #$2700 */
-    m68k_write_16(&cpu, 0x00000100, 0x4E71);
-    m68k_write_16(&cpu, 0x00000102, 0x4E72);
-    m68k_write_16(&cpu, 0x00000104, 0x2700);
-
-    m68k_reset(&cpu);
-
-    int total_cycles = 0;
-    while (!cpu.stopped) {
-        total_cycles += m68k_execute(&cpu, 32);
-    }
-
-    printf("Stopped. cycles=%d pc=0x%08X\n", total_cycles, cpu.pc);
-
-    free(ram);
-    return 0;
-}
+```sql
+select * from vizier_flush();
 ```
 
-## 3. Running Without Reset Vectors
+### 2. Review the workload
 
-You can also set state directly:
-
-```c
-m68k_set_ar(&cpu, 7, 0x0000FF00); /* A7/SP */
-m68k_set_sr(&cpu, 0x2700);         /* supervisor mode */
-m68k_set_pc(&cpu, 0x00000100);
+```sql
+select * from vizier.workload_summary;
 ```
 
-Use this pattern when your host controls boot flow explicitly.
-
-## 4. Basic Execution Model
-
-- `m68k_step(&cpu)` executes one instruction (with interrupt/trace checks).
-- `m68k_execute(&cpu, cycles)` runs until the timeslice is exhausted.
-- `m68k_cycles_run(&cpu)` and `m68k_cycles_remaining(&cpu)` report timeslice accounting.
-- `m68k_end_timeslice(&cpu)` forces the current timeslice to finish.
-
-## 5. Callback Wiring (Optional)
-
-```c
-static void wait_bus(M68kCpu* cpu, u32 address, M68kSize size) {
-    (void)address;
-    (void)size;
-    /* Add 2 wait-state cycles for each access */
-    cpu->cycles_remaining -= 2;
-}
-
-static int int_ack(M68kCpu* cpu, int level) {
-    (void)cpu;
-    (void)level;
-    return M68K_INT_ACK_AUTOVECTOR;
-}
-
-m68k_set_wait_bus_callback(&cpu, wait_bus);
-m68k_set_int_ack_callback(&cpu, int_ack);
+```
+┌──────────────┬──────────────────────────────────────────────────────────────────────────┬───────┬─────────────────────┬────────┐
+│     sig      │                                   sql                                    │ runs  │      last_seen      │ avg_ms │
+├──────────────┼──────────────────────────────────────────────────────────────────────────┼───────┼─────────────────────┼────────┤
+│ 8c9d7175aab0 │ SELECT * FROM events WHERE account_id = 42 AND ts >= DATE '2026-01-01'   │     2 │ 2026-03-22 16:44:06 │    0.0 │
+│ 2af899d9dba6 │ SELECT count(*) FROM orders GROUP BY customer_id                         │     1 │ 2026-03-22 16:44:06 │    0.0 │
+└──────────────┴──────────────────────────────────────────────────────────────────────────┴───────┴─────────────────────┴────────┘
 ```
 
-For mapped-memory or MMIO host integration, see the host bus callback example in [Examples](examples.md#6-use-a-host-bus-with-memory-callbacks).
+### 3. Analyze and get recommendations
 
-## 6. Useful Notes
+```sql
+select * from vizier_analyze();
+select * from vizier.recommendations;
+```
 
-- Memory accesses are checked against `cpu.memory_size`; out-of-range accesses trigger bus error handling.
-- Internally, addresses are masked to 24-bit before validation.
-- `M68kCpu` state is instance-local, so multiple CPU instances can run independently.
+Each recommendation includes a kind, target table, SQL to execute, score, and confidence level.
+
+### 4. Apply a recommendation
+
+Preview first with a dry run:
+
+```sql
+select * from vizier_apply(1, dry_run => true);
+```
+
+Then apply:
+
+```sql
+select * from vizier_apply(1);
+```
+
+### 5. Measure the impact
+
+```sql
+select * from vizier_benchmark('select * from events where account_id = 42', 10);
+select * from vizier_compare(1);
+```
+
+## Persistent state
+
+By default, Vizier state is in-memory. To persist across sessions:
+
+```sql
+-- Initialize with a state file
+select * from vizier_init('/path/to/vizier_state.db');
+
+-- Or configure the path (auto-loads on next extension init)
+select vizier_configure('state_path', '/path/to/vizier_state.db');
+```
+
+You can also export and import state between environments:
+
+```sql
+select * from vizier_save('/tmp/vizier_state.db');
+select * from vizier_load('/tmp/vizier_state.db');
+```
+
+## Bulk capture
+
+If you have a table with query logs:
+
+```sql
+select * from vizier_capture_bulk('query_log', 'sql_text');
+select * from vizier_flush();
+```
+
+## Session capture
+
+Capture all queries in a session without calling `vizier_capture()` per query:
+
+```sql
+select * from vizier_start_capture();
+-- run your queries here
+select * from vizier_stop_capture();
+```
+
+## Import from profiling output
+
+If you have a DuckDB JSON profiling file:
+
+```sql
+select * from vizier_import_profile('/path/to/profile.json');
+select * from vizier_flush();
+```

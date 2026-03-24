@@ -1,38 +1,64 @@
-# Rocket 68
+# Vizier
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/habedi/rocket68/main/logo.svg" alt="Project Logo" width="200" />
-</p>
+A database advisor and finetuner for DuckDB.
 
-Rocket 68 is a Motorola 68000 (or m68k) CPU emulator written in pure C11.
-It supports all the instructions and addressing modes of the m68k, plus system control features like supervisor mode, interrupts, and exceptions.
-It tracks timing with baseline cycle accounting and optional wait states, so you get predictable scheduling and more realistic memory/bus timing.
+---
 
-## Why Rocket 68?
+Vizier is a DuckDB extension that analyzes your query workload and recommends physical design changes:
+indexes, sort orders, Parquet layouts, and summary tables.
 
-Rocket 68 is built to provide a clean, correct, and easy-to-embed Motorola 68000 core for projects that need to run m68k code.
-A lot of existing 68k emulators are originally designed as full system emulators rather than reusable libraries, which can make it
-hard to integrate them into other projects.
-Rocket 68 focuses on correctness first: instruction behavior, exception handling, and cycle timing closely follow real hardware so projects
-can rely on predictable and accurate CPU behavior.
+## Why Vizier?
 
-Rocket 68 is designed to be used a portable library.
-All state lives inside a single `M68kCpu` instance, with no shared global state.
-This makes it relatively straightforward to run multiple CPUs or integrate the core into larger systems.
-Additionally, the codebase uses modern C11 with a small and explicit API that makes the project easy to use and extend.
+When you have a DuckDB database, you are on your own to figure out things like:
+
+- Which columns need indexes?
+- Should I rewrite my table sorted differently?
+- What sort order should my Parquet exports use?
+- Are any of my indexes redundant?
+- Which queries are my bottleneck?
+
+Tools like pg_qualstats (PostgreSQL) and Database Engine Tuning Advisor (SQL Server) solve these problems,
+but nothing equivalent exists for DuckDB. Vizier fills that gap.
+
+## How it works
+
+You feed Vizier your workload and it tells you what to change:
+
+```sql
+-- Capture your real queries
+select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
+select * from vizier_flush();
+
+-- Get recommendations
+select * from vizier_analyze();
+select * from vizier.recommendations;
+-- create index idx_events_account_id on events(account_id)
+-- rewrite events sorted by (account_id, ts) for scan pruning
+
+-- Apply and measure
+select * from vizier_apply(1);
+select * from vizier_benchmark('select * from events where account_id = 42', 10);
+```
+
+## What Vizier is not
+
+Vizier is not an auto-tuner. It does not rewrite your tables for you.
+It recommends changes, explains why, lets you dry-run, and measures the impact.
+You make the decision to apply.
 
 ## Features
 
-- Have a simple API and easy to integrate into other projects
-- Supports all Motorola 68000 instructions and different addressing modes
-- Baseline cycle accounting with an optional wait-state callback for bus timing
-- Full hardware interrupt support (with auto-vectoring, address error traps, trace mode, and halted states)
-- Built-in instruction disassembler and support for loading binary and S-record programs
+- Query pattern and execution stat capture
+- Physical design inspection (indexes, table sizes, cardinalities, and storage layout)
+- Workload analysis with bottleneck detection
+- Index, sort order, Parquet layout, and summary table recommendations
+- Dry-run support and before/after benchmarking
+- Rollback for applied recommendations
+- Persistent state across sessions
+- Static HTML report generation
 
 ## Documentation
 
 - [Getting Started](getting-started.md)
 - [Examples](examples.md)
 - [API Reference](api-reference.md)
-- [Compatibility Notes](compatibility.md)
-- [Doxygen API Documentation](https://habedi.github.io/rocket68/doxygen/index.html)
