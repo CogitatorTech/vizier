@@ -14,7 +14,8 @@ pub const dashboard = @import("vizier/dashboard.zig");
 // Constants
 // ============================================================================
 
-pub const version: [*:0]const u8 = "0.1.0";
+const build_options = @import("build_options");
+pub const version: [*:0]const u8 = @ptrCast(build_options.version);
 
 // ============================================================================
 // C-exported functions called from extension.c

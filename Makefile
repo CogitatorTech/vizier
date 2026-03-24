@@ -14,7 +14,6 @@ JUNK_FILES := *.o *.obj *.dSYM *.dll *.so *.dylib *.a *.lib *.pdb temp/
 # Extension configuration
 EXTENSION_NAME ?= vizier
 EXTENSION_API_VERSION ?= v1.2.0
-EXTENSION_VERSION ?= v0.1.0
 PLATFORM ?= linux_amd64
 
 SHELL         := /usr/bin/env bash
@@ -38,12 +37,12 @@ help: ## Show the help messages for all targets
 	@echo ""
 	@echo "Configuration Variables:"
 	@echo "  EXTENSION_API_VERSION    DuckDB extension API version to target (default: $(EXTENSION_API_VERSION))"
-	@echo "  EXTENSION_VERSION Extension version (default: $(EXTENSION_VERSION))"
 	@echo "  PLATFORM          Target platform (default: $(PLATFORM))"
 	@echo ""
+	@echo "Note: Extension version is read from build.zig.zon (as our single source of truth)."
+	@echo ""
 	@echo "Examples:"
-	@echo "  make build-all EXTENSION_API_VERSION=v1.3.0"
-	@echo "  make build-all EXTENSION_API_VERSION=v1.2.0 EXTENSION_VERSION=v1.0.0"
+	@echo "  make build-all EXTENSION_API_VERSION=v1.2.0"
 
 all: build test  ## Build and test (use 'make build-all' for extension with metadata)
 
@@ -58,7 +57,6 @@ build-all: ## Build extension with DuckDB metadata (ready to load)
 	@$(ZIG) build build-all \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=$(PLATFORM) \
 		-j$(JOBS)
 
@@ -69,7 +67,6 @@ test: ## Run all tests (unit, property, integration)
 	@$(ZIG) build test \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=$(PLATFORM) \
 		-j$(JOBS) $(TEST_FLAGS)
 
@@ -86,7 +83,6 @@ test-integration: build-all  ## Run integration tests (requires DuckDB)
 	@$(ZIG) build test-integration \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=$(PLATFORM) \
 		$(TEST_FLAGS)
 
@@ -115,7 +111,6 @@ release: ## Build in ReleaseFast mode with metadata
 		-Doptimize=ReleaseFast \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=$(PLATFORM) \
 		-j$(JOBS)
 
@@ -155,8 +150,6 @@ duckdb-translate: ## Regenerate Zig bindings from DuckDB C API headers
 duckdb: build-all  ## Start interactive DuckDB with the extension loaded
 	@echo "Starting DuckDB with extension pre-loaded..."
 	@$(ZIG) build duckdb \
-		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=$(PLATFORM)
 
 install-deps: ## Install system dependencies (for Debian-based systems)
@@ -180,11 +173,10 @@ build-linux-amd64: ## Build for Linux x86_64
 		-Dtarget=x86_64-linux-gnu \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=linux_amd64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/linux_amd64
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/linux_amd64/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/linux_amd64/${EXTENSION_NAME}.duckdb_extension
 
 build-linux-arm64: ## Build for Linux ARM64
 	@echo "Building for Linux ARM64..."
@@ -192,11 +184,10 @@ build-linux-arm64: ## Build for Linux ARM64
 		-Dtarget=aarch64-linux-gnu \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=linux_arm64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/linux_arm64
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/linux_arm64/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/linux_arm64/${EXTENSION_NAME}.duckdb_extension
 
 build-linux-amd64-musl: ## Build for Linux x86_64 with musl libc (for Alpine Linux)
 	@echo "Building for Linux AMD64 (musl)..."
@@ -204,11 +195,10 @@ build-linux-amd64-musl: ## Build for Linux x86_64 with musl libc (for Alpine Lin
 		-Dtarget=x86_64-linux-musl \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=linux_amd64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/linux_amd64_musl
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/linux_amd64_musl/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/linux_amd64_musl/${EXTENSION_NAME}.duckdb_extension
 
 build-linux-arm64-musl: ## Build for Linux ARM64 with musl libc (for Alpine Linux)
 	@echo "Building for Linux ARM64 (musl)..."
@@ -216,11 +206,10 @@ build-linux-arm64-musl: ## Build for Linux ARM64 with musl libc (for Alpine Linu
 		-Dtarget=aarch64-linux-musl \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=linux_arm64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/linux_arm64_musl
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/linux_arm64_musl/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/linux_arm64_musl/${EXTENSION_NAME}.duckdb_extension
 
 build-macos-amd64: ## Build for macOS x86_64 (Intel)
 	@echo "Building for macOS AMD64..."
@@ -228,11 +217,10 @@ build-macos-amd64: ## Build for macOS x86_64 (Intel)
 		-Dtarget=x86_64-macos \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=osx_amd64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/osx_amd64
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/osx_amd64/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/osx_amd64/${EXTENSION_NAME}.duckdb_extension
 
 build-macos-arm64: ## Build for macOS ARM64 (Apple Silicon)
 	@echo "Building for macOS ARM64..."
@@ -240,11 +228,10 @@ build-macos-arm64: ## Build for macOS ARM64 (Apple Silicon)
 		-Dtarget=aarch64-macos \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=osx_arm64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/osx_arm64
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/osx_arm64/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/osx_arm64/${EXTENSION_NAME}.duckdb_extension
 
 build-windows-amd64: ## Build for Windows x86_64
 	@echo "Building for Windows AMD64..."
@@ -252,11 +239,10 @@ build-windows-amd64: ## Build for Windows x86_64
 		-Dtarget=x86_64-windows-gnu \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=windows_amd64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/windows_amd64
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/windows_amd64/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/windows_amd64/${EXTENSION_NAME}.duckdb_extension
 
 build-windows-arm64: ## Build for Windows ARM64
 	@echo "Building for Windows ARM64..."
@@ -264,11 +250,10 @@ build-windows-arm64: ## Build for Windows ARM64
 		-Dtarget=aarch64-windows-gnu \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=windows_arm64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/windows_arm64
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/windows_arm64/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/windows_arm64/${EXTENSION_NAME}.duckdb_extension
 
 build-freebsd-amd64: ## Build for FreeBSD x86_64
 	@echo "Building for FreeBSD AMD64..."
@@ -276,11 +261,10 @@ build-freebsd-amd64: ## Build for FreeBSD x86_64
 		-Dtarget=x86_64-freebsd \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=freebsd_amd64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/freebsd_amd64
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/freebsd_amd64/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/freebsd_amd64/${EXTENSION_NAME}.duckdb_extension
 
 build-freebsd-arm64: ## Build for FreeBSD ARM64
 	@echo "Building for FreeBSD ARM64..."
@@ -288,11 +272,10 @@ build-freebsd-arm64: ## Build for FreeBSD ARM64
 		-Dtarget=aarch64-freebsd \
 		-Dextension-name=$(EXTENSION_NAME) \
 		-Dapi-version=$(EXTENSION_API_VERSION) \
-		-Dextension-version=$(EXTENSION_VERSION) \
 		-Dplatform=freebsd_arm64 \
 		-j$(JOBS)
 	@mkdir -p $(BUILD_DIR)/lib/freebsd_arm64
-	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/freebsd_arm64/extension.duckdb_extension
+	@cp $(BUILD_DIR)/lib/${EXTENSION_NAME}.duckdb_extension $(BUILD_DIR)/lib/freebsd_arm64/${EXTENSION_NAME}.duckdb_extension
 
 # Build for all major platforms
 .PHONY: build-all-platforms

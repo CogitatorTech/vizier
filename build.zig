@@ -1,4 +1,5 @@
 const std = @import("std");
+const build_zon = @import("build.zig.zon");
 
 pub fn build(b: *std.Build) void {
     // Add standard options for target and optimization mode.
@@ -7,10 +8,14 @@ pub fn build(b: *std.Build) void {
         .preferred_optimize_mode = .ReleaseFast,
     });
 
+    // Version from build.zig.zon (single source of truth)
+    const zon_version = build_zon.version;
+    const extension_version_default = b.fmt("v{s}", .{zon_version});
+
     // Build options for DuckDB Extension configuration
     const extension_name = b.option([]const u8, "extension-name", "Extension name (default: vizier)") orelse "vizier";
     const extension_api_version = b.option([]const u8, "api-version", "DuckDB Extension API version (default: v1.2.0)") orelse "v1.2.0";
-    const extension_version = b.option([]const u8, "extension-version", "Extension version (default: v0.1.0)") orelse "v0.1.0";
+    const extension_version = b.option([]const u8, "extension-version", "Extension version") orelse extension_version_default;
     const platform = b.option([]const u8, "platform", "Target platform (e.g., linux_amd64, linux_arm64)") orelse detectPlatform(target);
 
     // Resolve the extension-template-c dependency from build.zig.zon
@@ -21,12 +26,17 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/duckdb.zig"),
     });
 
+    // Build options passed to library code
+    const build_options = b.addOptions();
+    build_options.addOption([]const u8, "version", zon_version);
+
     const root_module = b.createModule(.{
         .root_source_file = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,
     });
     root_module.addImport("duckdb", duckdb_module);
+    root_module.addImport("build_options", build_options.createModule());
 
     const lib = b.addLibrary(.{
         .name = extension_name,

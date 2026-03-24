@@ -1,25 +1,35 @@
-name: Build and Test Extensions
+name: Make Release
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
       - develop
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     branches:
       - main
-  workflow_dispatch:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
-  EXTENSION_NAME: extension
+  EXTENSION_NAME: vizier
   EXTENSION_API_VERSION: v1.2.0
-  EXTENSION_VERSION: v0.1.0
   ZIG_VERSION: 0.15.2
-  DUCKDB_VERSION: v1.4.4
+  DUCKDB_VERSION: v1.5.0
 
 jobs:
   build-linux-amd64:
@@ -46,7 +56,7 @@ jobs:
           make build-linux-amd64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-            EXTENSION_VERSION=${{ env.EXTENSION_VERSION }}
+
 
       - name: Download DuckDB CLI
         run: |
@@ -57,7 +67,7 @@ jobs:
       - name: Smoke test
         run: |
           ./duckdb -unsigned -c "
-            LOAD 'zig-out/lib/linux_amd64/extension.duckdb_extension';
+            LOAD 'zig-out/lib/linux_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension';
             SELECT extension_name, loaded, extension_version FROM duckdb_extensions() WHERE extension_name = '${{ env.EXTENSION_NAME }}';
           " > test_output.txt
           cat test_output.txt
@@ -67,7 +77,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-linux-amd64
-          path: zig-out/lib/linux_amd64/extension.duckdb_extension
+          path: zig-out/lib/linux_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
           if-no-files-found: error
 
   build-linux-arm64:
@@ -94,7 +104,7 @@ jobs:
           make build-linux-arm64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-            EXTENSION_VERSION=${{ env.EXTENSION_VERSION }}
+
 
       - name: Download DuckDB CLI
         run: |
@@ -105,7 +115,7 @@ jobs:
       - name: Smoke test
         run: |
           ./duckdb -unsigned -c "
-            LOAD 'zig-out/lib/linux_arm64/extension.duckdb_extension';
+            LOAD 'zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension';
             SELECT extension_name, loaded, extension_version FROM duckdb_extensions() WHERE extension_name = '${{ env.EXTENSION_NAME }}';
           " > test_output.txt
           cat test_output.txt
@@ -115,7 +125,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-linux-arm64
-          path: zig-out/lib/linux_arm64/extension.duckdb_extension
+          path: zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
           if-no-files-found: error
 
   build-linux-amd64-musl:
@@ -142,14 +152,14 @@ jobs:
           make build-linux-amd64-musl \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-            EXTENSION_VERSION=${{ env.EXTENSION_VERSION }}
+
 
       - name: Verify build artifact
         run: |
-          if [ -f "zig-out/lib/linux_amd64_musl/extension.duckdb_extension" ]; then
+          if [ -f "zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension" ]; then
             echo "Extension built successfully"
-            file zig-out/lib/linux_amd64_musl/extension.duckdb_extension
-            ls -lh zig-out/lib/linux_amd64_musl/extension.duckdb_extension
+            file zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
+            ls -lh zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
           else
             echo "Extension file not found"
             exit 1
@@ -159,7 +169,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-linux-amd64-musl
-          path: zig-out/lib/linux_amd64_musl/extension.duckdb_extension
+          path: zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
           if-no-files-found: error
 
   build-linux-arm64-musl:
@@ -186,14 +196,14 @@ jobs:
           make build-linux-arm64-musl \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-            EXTENSION_VERSION=${{ env.EXTENSION_VERSION }}
+
 
       - name: Verify build artifact
         run: |
-          if [ -f "zig-out/lib/linux_arm64_musl/extension.duckdb_extension" ]; then
+          if [ -f "zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension" ]; then
             echo "Extension built successfully"
-            file zig-out/lib/linux_arm64_musl/extension.duckdb_extension
-            ls -lh zig-out/lib/linux_arm64_musl/extension.duckdb_extension
+            file zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
+            ls -lh zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
           else
             echo "Extension file not found"
             exit 1
@@ -203,7 +213,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-linux-arm64-musl
-          path: zig-out/lib/linux_arm64_musl/extension.duckdb_extension
+          path: zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
           if-no-files-found: error
 
   build-macos-amd64:
@@ -230,7 +240,7 @@ jobs:
           make build-macos-amd64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-            EXTENSION_VERSION=${{ env.EXTENSION_VERSION }}
+
 
       - name: Download DuckDB CLI
         run: |
@@ -241,7 +251,7 @@ jobs:
       - name: Smoke test
         run: |
           ./duckdb -unsigned -c "
-            LOAD 'zig-out/lib/osx_amd64/extension.duckdb_extension';
+            LOAD 'zig-out/lib/osx_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension';
             SELECT extension_name, loaded, extension_version FROM duckdb_extensions() WHERE extension_name = '${{ env.EXTENSION_NAME }}';
           " > test_output.txt
           cat test_output.txt
@@ -251,7 +261,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-macos-amd64
-          path: zig-out/lib/osx_amd64/extension.duckdb_extension
+          path: zig-out/lib/osx_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
           if-no-files-found: error
 
   build-macos-arm64:
@@ -278,7 +288,7 @@ jobs:
           make build-macos-arm64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-            EXTENSION_VERSION=${{ env.EXTENSION_VERSION }}
+
 
       - name: Download DuckDB CLI
         run: |
@@ -289,7 +299,7 @@ jobs:
       - name: Smoke test
         run: |
           ./duckdb -unsigned -c "
-            LOAD 'zig-out/lib/osx_arm64/extension.duckdb_extension';
+            LOAD 'zig-out/lib/osx_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension';
             SELECT extension_name, loaded, extension_version FROM duckdb_extensions() WHERE extension_name = '${{ env.EXTENSION_NAME }}';
           " > test_output.txt
           cat test_output.txt
@@ -299,7 +309,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-macos-arm64
-          path: zig-out/lib/osx_arm64/extension.duckdb_extension
+          path: zig-out/lib/osx_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
           if-no-files-found: error
 
   build-windows-amd64:
@@ -327,7 +337,7 @@ jobs:
           make build-windows-amd64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-            EXTENSION_VERSION=${{ env.EXTENSION_VERSION }}
+
 
       - name: Download DuckDB CLI
         shell: bash
@@ -339,7 +349,7 @@ jobs:
         shell: bash
         run: |
           ./duckdb.exe -unsigned -c "
-            LOAD 'zig-out/lib/windows_amd64/extension.duckdb_extension';
+            LOAD 'zig-out/lib/windows_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension';
             SELECT extension_name, loaded, extension_version FROM duckdb_extensions() WHERE extension_name = '${{ env.EXTENSION_NAME }}';
           " > test_output.txt
           cat test_output.txt
@@ -349,7 +359,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-windows-amd64
-          path: zig-out/lib/windows_amd64/extension.duckdb_extension
+          path: zig-out/lib/windows_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
           if-no-files-found: error
 
   build-windows-arm64:
@@ -377,15 +387,15 @@ jobs:
           make build-windows-arm64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-            EXTENSION_VERSION=${{ env.EXTENSION_VERSION }}
+
 
       - name: Verify build artifact
         shell: bash
         run: |
-          if [ -f "zig-out/lib/windows_arm64/extension.duckdb_extension" ]; then
+          if [ -f "zig-out/lib/windows_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension" ]; then
             echo "Extension built successfully for Windows ARM64"
-            file zig-out/lib/windows_arm64/extension.duckdb_extension || echo "file command not available"
-            ls -lh zig-out/lib/windows_arm64/extension.duckdb_extension
+            file zig-out/lib/windows_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension || echo "file command not available"
+            ls -lh zig-out/lib/windows_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
           else
             echo "Extension file not found"
             exit 1
@@ -395,7 +405,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-windows-arm64
-          path: zig-out/lib/windows_arm64/extension.duckdb_extension
+          path: zig-out/lib/windows_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
           if-no-files-found: error
 
   build-freebsd-amd64:
@@ -422,14 +432,14 @@ jobs:
           make build-freebsd-amd64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-            EXTENSION_VERSION=${{ env.EXTENSION_VERSION }}
+
 
       - name: Verify build artifact
         run: |
-          if [ -f "zig-out/lib/freebsd_amd64/extension.duckdb_extension" ]; then
+          if [ -f "zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension" ]; then
             echo "Extension built successfully for FreeBSD AMD64"
-            file zig-out/lib/freebsd_amd64/extension.duckdb_extension
-            ls -lh zig-out/lib/freebsd_amd64/extension.duckdb_extension
+            file zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
+            ls -lh zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
           else
             echo "Extension file not found"
             exit 1
@@ -439,7 +449,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-freebsd-amd64
-          path: zig-out/lib/freebsd_amd64/extension.duckdb_extension
+          path: zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
           if-no-files-found: error
 
   summary:
@@ -477,6 +487,5 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Extension Details" >> $GITHUB_STEP_SUMMARY
           echo "- **Extension API Version:** ${{ env.EXTENSION_API_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Extension Version:** ${{ env.EXTENSION_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Zig Version:** ${{ env.ZIG_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- **DuckDB Version (tested):** ${{ env.DUCKDB_VERSION }}" >> $GITHUB_STEP_SUMMARY

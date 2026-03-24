@@ -4,12 +4,12 @@
 
 ---
 
-Vizier is a DuckDB extension that analyzes your query workload and recommends physical design changes like indexes, sort orders, Parquet layouts,
+Vizier is a DuckDB extension that analyzes your (query) workload and recommends physical design changes like indexes, sort orders, Parquet layouts,
 and summary tables to improve query performance.
 
 ## Why Vizier?
 
-When you have a DuckDB database, you are on your own to figure out things like:
+When you have a DuckDB database, you are typically on your own to figure out things like:
 
 - Which columns need indexes?
 - Should I rewrite my table sorted differently?
