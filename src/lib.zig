@@ -8,6 +8,7 @@ pub const extract = @import("vizier/extract.zig");
 pub const inspect = @import("vizier/inspect.zig");
 pub const advisor = @import("vizier/advisor.zig");
 pub const sql_runner = @import("vizier/sql_runner.zig");
+pub const dashboard = @import("vizier/dashboard.zig");
 
 // ============================================================================
 // Constants
@@ -114,4 +115,14 @@ pub export fn zig_run_all_advisors(conn: duckdb.duckdb_connection) callconv(.c) 
 
 pub export fn zig_get_count_recommendations_sql() callconv(.c) [*:0]const u8 {
     return advisor.count_recommendations_sql;
+}
+
+// ---- Dashboard template accessors ----
+
+pub export fn zig_get_dashboard_before() callconv(.c) [*:0]const u8 {
+    return dashboard.template_before;
+}
+
+pub export fn zig_get_dashboard_after() callconv(.c) [*:0]const u8 {
+    return dashboard.template_after;
 }

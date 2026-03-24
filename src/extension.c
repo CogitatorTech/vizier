@@ -24,6 +24,8 @@ extern void zig_normalize_sql(const char *sql, const char **out_ptr,
                               size_t *out_len);
 extern int64_t zig_run_all_advisors(duckdb_connection conn);
 extern const char *zig_get_count_recommendations_sql(void);
+extern const char *zig_get_dashboard_before(void);
+extern const char *zig_get_dashboard_after(void);
 
 // ============================================================================
 // Global state
@@ -2567,6 +2569,157 @@ static void report_execute(duckdb_function_info info,
 }
 
 // ============================================================================
+// vizier_dashboard(path) — interactive HTML dashboard
+// ============================================================================
+
+// Helper: run a query returning a single JSON string column, malloc result.
+static char *dup_str(const char *s) {
+  size_t len = strlen(s);
+  char *d = (char *)malloc(len + 1);
+  memcpy(d, s, len + 1);
+  return d;
+}
+
+static char *query_json(duckdb_connection conn, const char *sql) {
+  duckdb_result result;
+  memset(&result, 0, sizeof(result));
+  if (duckdb_query(conn, sql, &result) != DuckDBSuccess) {
+    duckdb_destroy_result(&result);
+    return dup_str("[]");
+  }
+  duckdb_data_chunk chunk = duckdb_fetch_chunk(result);
+  char *out = NULL;
+  if (chunk && duckdb_data_chunk_get_size(chunk) > 0) {
+    duckdb_vector vec = duckdb_data_chunk_get_vector(chunk, 0);
+    duckdb_string_t *data = (duckdb_string_t *)duckdb_vector_get_data(vec);
+    uint32_t len = duckdb_string_t_length(data[0]);
+    const char *ptr = duckdb_string_t_data(&data[0]);
+    out = (char *)malloc(len + 1);
+    memcpy(out, ptr, len);
+    out[len] = '\0';
+  }
+  if (chunk)
+    duckdb_destroy_data_chunk(&chunk);
+  duckdb_destroy_result(&result);
+  return out ? out : dup_str("[]");
+}
+
+typedef struct {
+  char status[64];
+  bool success;
+} DashboardBindData;
+
+static void dashboard_bind(duckdb_bind_info info) {
+  duckdb_logical_type varchar_type =
+      duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+  duckdb_bind_add_result_column(info, "status", varchar_type);
+  duckdb_bind_add_result_column(info, "path", varchar_type);
+  duckdb_destroy_logical_type(&varchar_type);
+
+  duckdb_value param = duckdb_bind_get_parameter(info, 0);
+  char *file_path = duckdb_get_varchar(param);
+  duckdb_destroy_value(&param);
+
+  DashboardBindData *bd =
+      (DashboardBindData *)malloc(sizeof(DashboardBindData));
+  strncpy(bd->status, "error", sizeof(bd->status));
+  bd->success = false;
+
+  if (!g_flush_conn || !file_path)
+    goto dash_done;
+
+  {
+    // Query each dataset as JSON
+    char *recs_json = query_json(g_flush_conn,
+        "select coalesce(json_group_array(json_object("
+        "'id', recommendation_id, 'kind', kind, 'table_name', table_name, "
+        "'score', round(score, 3), 'confidence', round(confidence, 2), "
+        "'reason', reason, 'sql', sql_text)), '[]') "
+        "from vizier.recommendation_store where status = 'pending'");
+
+    char *wl_json = query_json(g_flush_conn,
+        "select coalesce(json_group_array(json_object("
+        "'sig', query_signature, 'sql', sample_sql, "
+        "'runs', execution_count, 'avg_ms', round(avg_time_ms, 2))), '[]') "
+        "from vizier.workload_queries");
+
+    char *acts_json = query_json(g_flush_conn,
+        "select coalesce(json_group_array(json_object("
+        "'id', action_id, 'sql', sql_text, "
+        "'success', success, 'notes', notes, "
+        "'can_rollback', case when inverse_sql != '' then true else false end"
+        ")), '[]') from vizier.applied_actions");
+
+    char *rep_json = query_json(g_flush_conn,
+        "select coalesce(json_group_array(json_object("
+        "'sig', r.query_signature, 'sql', r.sample_sql, "
+        "'avg_ms', round(r.avg_ms, 2), "
+        "'verdict', case "
+        "  when w.avg_time_ms > 0 and r.avg_ms > w.avg_time_ms * 1.2 then 'regression' "
+        "  when w.avg_time_ms > 0 and r.avg_ms < w.avg_time_ms * 0.8 then 'improved' "
+        "  else 'stable' end"
+        ")), '[]') from vizier.replay_results r "
+        "left join vizier.workload_queries w "
+        "on r.query_signature = w.query_signature");
+
+    // Build the combined JSON object
+    size_t total_len = strlen(recs_json) + strlen(wl_json) +
+                       strlen(acts_json) + strlen(rep_json) + 256;
+    char *data_json = (char *)malloc(total_len);
+    snprintf(data_json, total_len,
+             "{\"recommendations\":%s,\"workload\":%s,"
+             "\"actions\":%s,\"replay\":%s}",
+             recs_json, wl_json, acts_json, rep_json);
+
+    free(recs_json);
+    free(wl_json);
+    free(acts_json);
+    free(rep_json);
+
+    // Write HTML: template_before + JSON + template_after
+    FILE *fp = fopen(file_path, "w");
+    if (fp) {
+      const char *before = zig_get_dashboard_before();
+      const char *after = zig_get_dashboard_after();
+      fputs(before, fp);
+      fputs(data_json, fp);
+      fputs(after, fp);
+      fclose(fp);
+      bd->success = true;
+      strncpy(bd->status, "ok", sizeof(bd->status));
+    }
+
+    free(data_json);
+  }
+
+dash_done:
+  duckdb_free(file_path);
+  duckdb_bind_set_bind_data(info, bd, free);
+  duckdb_bind_set_cardinality(info, 1, true);
+}
+
+static void dashboard_execute(duckdb_function_info info,
+                              duckdb_data_chunk output) {
+  struct {
+    bool done;
+  } *init_data = duckdb_function_get_init_data(info);
+  if (init_data->done) {
+    duckdb_data_chunk_set_size(output, 0);
+    return;
+  }
+  DashboardBindData *bd =
+      (DashboardBindData *)duckdb_function_get_bind_data(info);
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 0), 0, bd->status,
+      strlen(bd->status));
+  const char *msg = bd->success ? "Dashboard generated" : "Failed";
+  duckdb_vector_assign_string_element_len(
+      duckdb_data_chunk_get_vector(output, 1), 0, msg, strlen(msg));
+  duckdb_data_chunk_set_size(output, 1);
+  init_data->done = true;
+}
+
+// ============================================================================
 // vizier_analyze() table function — runs all advisors
 // ============================================================================
 
@@ -3109,6 +3262,24 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
     duckdb_table_function_set_function(func, report_execute);
     if (duckdb_register_table_function(conn, func) == DuckDBError) {
       access->set_error(info, "Vizier: failed to register vizier_report");
+      duckdb_destroy_table_function(&func);
+      return false;
+    }
+    duckdb_destroy_table_function(&func);
+  }
+
+  // ---- Register vizier_dashboard(path) ----
+  {
+    duckdb_table_function func = duckdb_create_table_function();
+    duckdb_table_function_set_name(func, "vizier_dashboard");
+    duckdb_logical_type vt = duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+    duckdb_table_function_add_parameter(func, vt);
+    duckdb_destroy_logical_type(&vt);
+    duckdb_table_function_set_bind(func, dashboard_bind);
+    duckdb_table_function_set_init(func, save_init);
+    duckdb_table_function_set_function(func, dashboard_execute);
+    if (duckdb_register_table_function(conn, func) == DuckDBError) {
+      access->set_error(info, "Vizier: failed to register vizier_dashboard");
       duckdb_destroy_table_function(&func);
       return false;
     }

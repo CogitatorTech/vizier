@@ -550,6 +550,18 @@ test "compare benchmarks before and after applying recommendation" {
     try expectContains(out, "1");
 }
 
+test "dashboard generates interactive HTML" {
+    const out = try runSql(testing.allocator,
+        \\select * from vizier_capture('select * from dash_t where x = 1');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select * from vizier_dashboard('/tmp/vizier_test_dashboard.html');
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+    try expectContains(out, "Dashboard generated");
+}
+
 test "report generates HTML file" {
     const out = try runSql(testing.allocator,
         \\select * from vizier_capture('select * from rpt_t where x = 1');

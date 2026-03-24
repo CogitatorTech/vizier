@@ -89,6 +89,14 @@ Multiple capture methods feed into the same `g_pending` buffer:
 - SQL keywords must be lowercase. Write `select`, `from`, `where`, `create table`, not `SELECT`, `FROM`, `WHERE`, `CREATE TABLE`. This applies to all
   SQL strings in Zig modules, C source, and generated recommendation SQL.
 
+## Writing Style
+
+- Use Oxford commas in inline lists: "a, b, and c" not "a, b, c".
+- Do not use em dashes. Restructure the sentence or use a colon instead.
+- Avoid colorful adjectives and adverbs. Write "TCP proxy" not "lightweight TCP proxy", "scoring components" not "transparent scoring components".
+- Use noun phrases for checklist items, not imperative verbs. Write "redundant index detection" not "detect redundant indexes".
+- SQL keywords in prose should be backticked: `` `JOIN` ``, `` `EXPLAIN` ``, `` `CREATE INDEX` ``.
+
 ## Required Validation
 
 Run `make test` for any change. This runs all three test suites:

@@ -48,7 +48,7 @@ Each benchmark reports structured timing data:
 4. Measure timing with the `epoch_ms` pattern:
    ```sql
    create table _t1 as select epoch_ms(now()::timestamp) as t;
-   -- ... operation to measure ...
+   -- ... Operation to measure ...
    select '  label: ' || (epoch_ms(now()::timestamp) - t)::varchar || ' ms' as result from _t1;
    ```
 5. Use `vizier_benchmark(sql, runs)` for controlled query-level measurements.
