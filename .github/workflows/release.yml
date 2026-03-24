@@ -1,22 +1,10 @@
-name: Make Release
+name: Create Release
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - develop
     tags:
       - 'v*'
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-  pull_request:
-    branches:
-      - main
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -32,9 +20,46 @@ env:
   DUCKDB_VERSION: v1.5.0
 
 jobs:
+  call-tests:
+    uses: ./.github/workflows/tests.yml
+
+  create-release:
+    name: Create release draft
+    runs-on: ubuntu-latest
+    needs: call-tests
+    permissions:
+      contents: write
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_tag: ${{ steps.release_tag.outputs.release_tag }}
+    steps:
+      - name: Set release tag
+        id: release_tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "release_tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_tag=draft-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.release_tag.outputs.release_tag }}
+          release_name: Release ${{ steps.release_tag.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          draft: true
+          prerelease: false
+
   build-linux-amd64:
     name: Build Linux AMD64
     runs-on: ubuntu-latest
+    needs: create-release
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -55,8 +80,7 @@ jobs:
         run: |
           make build-linux-amd64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
-            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-
+            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }}
 
       - name: Download DuckDB CLI
         run: |
@@ -73,16 +97,26 @@ jobs:
           cat test_output.txt
           grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Package release asset
+        run: |
+          zip -j ${{ env.EXTENSION_NAME }}-linux-amd64.zip zig-out/lib/linux_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: extension-linux-amd64
-          path: zig-out/lib/linux_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          if-no-files-found: error
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ env.EXTENSION_NAME }}-linux-amd64.zip
+          asset_name: ${{ env.EXTENSION_NAME }}-linux-amd64.zip
+          asset_content_type: application/zip
 
   build-linux-arm64:
     name: Build Linux ARM64
     runs-on: ubuntu-24.04-arm64
+    needs: create-release
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -103,8 +137,7 @@ jobs:
         run: |
           make build-linux-arm64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
-            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-
+            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }}
 
       - name: Download DuckDB CLI
         run: |
@@ -121,16 +154,26 @@ jobs:
           cat test_output.txt
           grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Package release asset
+        run: |
+          zip -j ${{ env.EXTENSION_NAME }}-linux-arm64.zip zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: extension-linux-arm64
-          path: zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          if-no-files-found: error
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ env.EXTENSION_NAME }}-linux-arm64.zip
+          asset_name: ${{ env.EXTENSION_NAME }}-linux-arm64.zip
+          asset_content_type: application/zip
 
   build-linux-amd64-musl:
     name: Build Linux AMD64 (musl)
     runs-on: ubuntu-latest
+    needs: create-release
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -151,8 +194,7 @@ jobs:
         run: |
           make build-linux-amd64-musl \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
-            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-
+            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }}
 
       - name: Verify build artifact
         run: |
@@ -165,16 +207,26 @@ jobs:
             exit 1
           fi
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Package release asset
+        run: |
+          zip -j ${{ env.EXTENSION_NAME }}-linux-amd64-musl.zip zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: extension-linux-amd64-musl
-          path: zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
-          if-no-files-found: error
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ env.EXTENSION_NAME }}-linux-amd64-musl.zip
+          asset_name: ${{ env.EXTENSION_NAME }}-linux-amd64-musl.zip
+          asset_content_type: application/zip
 
   build-linux-arm64-musl:
     name: Build Linux ARM64 (musl)
     runs-on: ubuntu-24.04-arm64
+    needs: create-release
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -195,8 +247,7 @@ jobs:
         run: |
           make build-linux-arm64-musl \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
-            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-
+            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }}
 
       - name: Verify build artifact
         run: |
@@ -209,64 +260,26 @@ jobs:
             exit 1
           fi
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: extension-linux-arm64-musl
-          path: zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
-          if-no-files-found: error
-
-  build-macos-amd64:
-    name: Build macOS AMD64
-    runs-on: macos-13
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: ${{ env.ZIG_VERSION }}
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Build extension
+      - name: Package release asset
         run: |
-          make build-macos-amd64 \
-            EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
-            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
+          zip -j ${{ env.EXTENSION_NAME }}-linux-arm64-musl.zip zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
 
-
-      - name: Download DuckDB CLI
-        run: |
-          wget -q https://github.com/duckdb/duckdb/releases/download/${{ env.DUCKDB_VERSION }}/duckdb_cli-osx-universal.zip
-          unzip -q duckdb_cli-osx-universal.zip
-          chmod +x duckdb
-
-      - name: Smoke test
-        run: |
-          ./duckdb -unsigned -c "
-            LOAD 'zig-out/lib/osx_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension';
-            SELECT extension_name, loaded, extension_version FROM duckdb_extensions() WHERE extension_name = '${{ env.EXTENSION_NAME }}';
-          " > test_output.txt
-          cat test_output.txt
-          grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: extension-macos-amd64
-          path: zig-out/lib/osx_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          if-no-files-found: error
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ env.EXTENSION_NAME }}-linux-arm64-musl.zip
+          asset_name: ${{ env.EXTENSION_NAME }}-linux-arm64-musl.zip
+          asset_content_type: application/zip
 
   build-macos-arm64:
     name: Build macOS ARM64
     runs-on: macos-14
+    needs: create-release
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -287,8 +300,7 @@ jobs:
         run: |
           make build-macos-arm64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
-            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-
+            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }}
 
       - name: Download DuckDB CLI
         run: |
@@ -305,16 +317,26 @@ jobs:
           cat test_output.txt
           grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Package release asset
+        run: |
+          zip -j ${{ env.EXTENSION_NAME }}-macos-arm64.zip zig-out/lib/osx_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: extension-macos-arm64
-          path: zig-out/lib/osx_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          if-no-files-found: error
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ env.EXTENSION_NAME }}-macos-arm64.zip
+          asset_name: ${{ env.EXTENSION_NAME }}-macos-arm64.zip
+          asset_content_type: application/zip
 
   build-windows-amd64:
     name: Build Windows AMD64
     runs-on: windows-latest
+    needs: create-release
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -336,8 +358,7 @@ jobs:
         run: |
           make build-windows-amd64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
-            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-
+            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }}
 
       - name: Download DuckDB CLI
         shell: bash
@@ -355,16 +376,27 @@ jobs:
           cat test_output.txt
           grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Package release asset
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "zig-out\lib\windows_amd64\${{ env.EXTENSION_NAME }}.duckdb_extension" -DestinationPath "${{ env.EXTENSION_NAME }}-windows-amd64.zip" -Force
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: extension-windows-amd64
-          path: zig-out/lib/windows_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          if-no-files-found: error
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ env.EXTENSION_NAME }}-windows-amd64.zip
+          asset_name: ${{ env.EXTENSION_NAME }}-windows-amd64.zip
+          asset_content_type: application/zip
 
   build-windows-arm64:
     name: Build Windows ARM64
     runs-on: windows-latest
+    needs: create-release
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -386,8 +418,7 @@ jobs:
         run: |
           make build-windows-arm64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
-            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-
+            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }}
 
       - name: Verify build artifact
         shell: bash
@@ -401,16 +432,27 @@ jobs:
             exit 1
           fi
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Package release asset
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "zig-out\lib\windows_arm64\${{ env.EXTENSION_NAME }}.duckdb_extension" -DestinationPath "${{ env.EXTENSION_NAME }}-windows-arm64.zip" -Force
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: extension-windows-arm64
-          path: zig-out/lib/windows_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          if-no-files-found: error
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ env.EXTENSION_NAME }}-windows-arm64.zip
+          asset_name: ${{ env.EXTENSION_NAME }}-windows-arm64.zip
+          asset_content_type: application/zip
 
   build-freebsd-amd64:
     name: Build FreeBSD AMD64 (cross-compile)
     runs-on: ubuntu-latest
+    needs: create-release
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -431,8 +473,7 @@ jobs:
         run: |
           make build-freebsd-amd64 \
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
-            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }} \
-
+            EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }}
 
       - name: Verify build artifact
         run: |
@@ -445,47 +486,16 @@ jobs:
             exit 1
           fi
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: extension-freebsd-amd64
-          path: zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          if-no-files-found: error
-
-  summary:
-    name: Build Summary
-    runs-on: ubuntu-latest
-    needs:
-      - build-linux-amd64
-      - build-linux-arm64
-      - build-linux-amd64-musl
-      - build-linux-arm64-musl
-      - build-macos-amd64
-      - build-macos-arm64
-      - build-windows-amd64
-      - build-windows-arm64
-      - build-freebsd-amd64
-    if: always()
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Display summary
+      - name: Package release asset
         run: |
-          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Artifacts built:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          for dir in artifacts/*/; do
-            platform=$(basename "$dir")
-            echo "- **${platform}**" >> $GITHUB_STEP_SUMMARY
-            ls -lh "$dir" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          done
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Extension Details" >> $GITHUB_STEP_SUMMARY
-          echo "- **Extension API Version:** ${{ env.EXTENSION_API_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Zig Version:** ${{ env.ZIG_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **DuckDB Version (tested):** ${{ env.DUCKDB_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          zip -j ${{ env.EXTENSION_NAME }}-freebsd-amd64.zip zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ env.EXTENSION_NAME }}-freebsd-amd64.zip
+          asset_name: ${{ env.EXTENSION_NAME }}-freebsd-amd64.zip
+          asset_content_type: application/zip

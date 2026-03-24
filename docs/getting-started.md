@@ -11,7 +11,7 @@ cd vizier
 # Build the extension
 make build-all
 
-# Run tests (needs DuckDB in PATH)
+# Run tests (optional; needs DuckDB in PATH)
 make test
 
 # Try Vizier interactively (needs DuckDB in PATH)
