@@ -101,7 +101,7 @@ Each recommendation includes a kind, target table, SQL to execute, score, and co
 Preview first with a dry run:
 
 ```sql
-select * from vizier_apply(1, dry_run = > true);
+select * from vizier_apply(1, dry_run => true);
 ```
 
 Then apply:
