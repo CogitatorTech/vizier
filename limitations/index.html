@@ -729,7 +729,7 @@ This means the quality of recommendations depends entirely on whether you feed V
 <p>Vizier uses two extraction strategies during a flush:</p>
 <ol>
 <li>
-<p>EXPLAIN-based extraction (preferred deafult): runs <code>EXPLAIN</code> on the captured query using DuckDB's own parser.
+<p>EXPLAIN-based extraction (preferred default): runs <code>EXPLAIN</code> on the captured query using DuckDB's own parser.
    This produces accurate table references, filter predicates, and estimated row counts directly from the
    query plan. Note that it only works when the referenced tables exist in the current database.</p>
 </li>
