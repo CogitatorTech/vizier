@@ -972,3 +972,204 @@ test "vizier_compare logs to applied_actions for rollback" {
     // applied_actions should have an entry from vizier_compare
     try expectContains(out, "1");
 }
+
+// ============================================================================
+// Coverage gap tests
+// ============================================================================
+
+test "vizier_configure updates and reads settings" {
+    const out = try runSql(testing.allocator,
+        \\select vizier_configure('benchmark_runs', '20');
+        \\select value from vizier.settings where key = 'benchmark_runs';
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+    try expectContains(out, "20");
+}
+
+test "vizier_rollback reverses an applied index" {
+    const out = try runSql(testing.allocator,
+        \\create table rb_test (id int, val varchar);
+        \\insert into rb_test select i, 'v' from range(50000) t(i);
+        \\select * from vizier_capture('select * from rb_test where id = 1');
+        \\select * from vizier_capture('select * from rb_test where id = 2');
+        \\select * from vizier_capture('select * from rb_test where id = 3');
+        \\select * from vizier_capture('select * from rb_test where id = 4');
+        \\select * from vizier_capture('select * from rb_test where id = 5');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select * from vizier_apply(1);
+        \\select status from vizier.recommendations where recommendation_id = 1;
+        \\select * from vizier_rollback(1);
+        \\select status from vizier.recommendation_store where recommendation_id = 1;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "applied");
+    try expectContains(out, "pending");
+}
+
+test "vizier_replay runs captured queries and records timing" {
+    const out = try runSql(testing.allocator,
+        \\create table replay_t (id int, val varchar);
+        \\insert into replay_t select i, 'v' from range(1000) t(i);
+        \\select * from vizier_capture('select count(*) from replay_t where id > 500');
+        \\select * from vizier_flush();
+        \\select * from vizier_replay();
+        \\select count(*) from vizier.replay_results;
+        \\select queries_replayed from vizier.replay_totals;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+    // Should replay 1 query
+    try expectContains(out, "1");
+}
+
+test "vizier_replay with table_name filter" {
+    const out = try runSql(testing.allocator,
+        \\create table replay_a (id int);
+        \\create table replay_b (id int);
+        \\select * from vizier_capture('select * from replay_a where id = 1');
+        \\select * from vizier_capture('select * from replay_b where id = 2');
+        \\select * from vizier_flush();
+        \\select * from vizier_replay(table_name => 'replay_a');
+        \\select count(*) from vizier.replay_results;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+    // Should replay only 1 query (the one touching replay_a)
+    try expectContains(out, "1");
+}
+
+test "vizier_report generates HTML file" {
+    const out = try runSql(testing.allocator,
+        \\select * from vizier_capture('select * from t where x = 1');
+        \\select * from vizier_flush();
+        \\select * from vizier_report('/tmp/_vizier_test_report.html');
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+}
+
+test "analyze produces no_action for well-optimized tables" {
+    const out = try runSql(testing.allocator,
+        \\create table noact_t (id int, val varchar);
+        \\insert into noact_t select i, 'v' from range(100) t(i);
+        \\select * from vizier_capture('select * from noact_t');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select kind from vizier.recommendation_store where table_name = 'noact_t';
+    );
+    defer testing.allocator.free(out);
+    // A query with no filters should produce no_action (no predicates to optimize)
+    try expectContains(out, "no_action");
+}
+
+test "analyze detects redundant indexes and suggests drop" {
+    const out = try runSql(testing.allocator,
+        \\create table ri_test (a int, b int, c int);
+        \\create index idx_ri_a on ri_test(a);
+        \\create index idx_ri_ab on ri_test(a, b);
+        \\select * from vizier_capture('select * from ri_test where a = 1');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select kind, sql_text from vizier.recommendation_store where kind = 'drop_redundant_index';
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "drop_redundant_index");
+    try expectContains(out, "idx_ri_a");
+}
+
+test "min_confidence pruning removes low-score recommendations" {
+    const out = try runSql(testing.allocator,
+        \\select vizier_configure('min_confidence', '0.99');
+        \\select * from vizier_capture('select * from t where x = 1');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select count(*) from vizier.recommendations where kind != 'no_action';
+    );
+    defer testing.allocator.free(out);
+    // With min_confidence=0.99, almost all recs should be pruned
+    try expectContains(out, "0");
+}
+
+test "vizier_apply dry_run does not execute SQL" {
+    const out = try runSql(testing.allocator,
+        \\create table dryrun_t (id int, val varchar);
+        \\insert into dryrun_t select i, 'v' from range(50000) t(i);
+        \\select * from vizier_capture('select * from dryrun_t where id = 1');
+        \\select * from vizier_capture('select * from dryrun_t where id = 2');
+        \\select * from vizier_capture('select * from dryrun_t where id = 3');
+        \\select * from vizier_capture('select * from dryrun_t where id = 4');
+        \\select * from vizier_capture('select * from dryrun_t where id = 5');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select status, sql_executed from vizier_apply(1, dry_run => true);
+        \\select status from vizier.recommendation_store where recommendation_id = 1;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "dry_run");
+    // Should still be pending (not applied)
+    try expectContains(out, "pending");
+}
+
+test "change_history view shows applied and rollback info" {
+    const out = try runSql(testing.allocator,
+        \\create table ch_test (id int, val varchar);
+        \\insert into ch_test select i, 'v' from range(50000) t(i);
+        \\select * from vizier_capture('select * from ch_test where id = 1');
+        \\select * from vizier_capture('select * from ch_test where id = 2');
+        \\select * from vizier_capture('select * from ch_test where id = 3');
+        \\select * from vizier_capture('select * from ch_test where id = 4');
+        \\select * from vizier_capture('select * from ch_test where id = 5');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select * from vizier_apply(1);
+        \\select action_id, kind, can_rollback from vizier.change_history;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "create_index");
+    try expectContains(out, "true");
+}
+
+test "overview macro shows table info" {
+    const out = try runSql(testing.allocator,
+        \\create table ov_test (id int, name varchar, val double);
+        \\insert into ov_test select i, 'n', i * 1.0 from range(100) t(i);
+        \\select * from vizier_capture('select * from ov_test where id = 1');
+        \\select * from vizier_flush();
+        \\select table_name, cols, predicates from vizier.overview() where table_name = 'ov_test';
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ov_test");
+}
+
+test "analyze_workload macro filters by execution count" {
+    const out = try runSql(testing.allocator,
+        \\select * from vizier_capture('select * from t1 where a = 1');
+        \\select * from vizier_capture('select * from t2 where b = 1');
+        \\select * from vizier_capture('select * from t2 where b = 1');
+        \\select * from vizier_capture('select * from t2 where b = 1');
+        \\select * from vizier_flush();
+        \\select sig, runs from vizier.analyze_workload('2020-01-01', 2);
+    );
+    defer testing.allocator.free(out);
+    // Only t2 has 3 runs (>= 2), t1 has 1 run
+    try expectContains(out, "3");
+}
+
+test "score_breakdown shows per-predicate scoring" {
+    const out = try runSql(testing.allocator,
+        \\create table sb_test (id int, name varchar);
+        \\insert into sb_test select i, 'n' from range(50000) t(i);
+        \\select * from vizier_capture('select * from sb_test where id = 1');
+        \\select * from vizier_capture('select * from sb_test where id = 2');
+        \\select * from vizier_capture('select * from sb_test where id = 3');
+        \\select * from vizier_capture('select * from sb_test where id = 4');
+        \\select * from vizier_capture('select * from sb_test where id = 5');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select column_name from vizier.score_breakdown(1);
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "id");
+}

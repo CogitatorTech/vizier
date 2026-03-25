@@ -447,3 +447,74 @@ test "extractColumnFromFilter" {
     try std.testing.expectEqualStrings("ts", extractColumnFromFilter("ts>='2026-01-01'::DATE"));
     try std.testing.expectEqualStrings("name", extractColumnFromFilter("name LIKE '%foo%'"));
 }
+
+test "parse empty plan produces empty result" {
+    const result = parsePlan("");
+    try std.testing.expectEqual(@as(usize, 0), result.table_count);
+    try std.testing.expectEqual(@as(usize, 0), result.predicate_count);
+    try std.testing.expectEqual(@as(u64, 0), result.estimated_rows);
+}
+
+test "isValidIdentifier rejects garbage names" {
+    try std.testing.expect(!isValidIdentifier(""));
+    try std.testing.expect(!isValidIdentifier("Type: Sequential Scan"));
+    try std.testing.expect(!isValidIdentifier("#0"));
+    try std.testing.expect(!isValidIdentifier("col name with spaces"));
+    try std.testing.expect(!isValidIdentifier("(parens)"));
+    try std.testing.expect(isValidIdentifier("account_id"));
+    try std.testing.expect(isValidIdentifier("l_shipdate"));
+    try std.testing.expect(isValidIdentifier("col123"));
+}
+
+test "parse multi-table plan extracts both tables" {
+    const plan =
+        \\┌───────────────────────────┐
+        \\│          SEQ_SCAN         │
+        \\│    ────────────────────   │
+        \\│           Table:          │
+        \\│     memory.main.orders    │
+        \\│                           │
+        \\│          Filters:         │
+        \\│       o_orderdate>='2024-01-01'::DATE  │
+        \\│                           │
+        \\│          ~100 rows        │
+        \\└───────────────────────────┘
+        \\┌───────────────────────────┐
+        \\│          SEQ_SCAN         │
+        \\│    ────────────────────   │
+        \\│           Table:          │
+        \\│    memory.main.lineitem   │
+        \\│                           │
+        \\│          Filters:         │
+        \\│       l_shipdate>='2024-01-01'::DATE   │
+        \\│                           │
+        \\│          ~500 rows        │
+        \\└───────────────────────────┘
+    ;
+
+    const result = parsePlan(plan);
+    try std.testing.expectEqual(@as(usize, 2), result.table_count);
+    try std.testing.expectEqualStrings("orders", result.tables[0].name);
+    try std.testing.expectEqualStrings("lineitem", result.tables[1].name);
+    try std.testing.expectEqual(@as(u64, 500), result.estimated_rows);
+}
+
+test "parseFilterLine skips IS NOT NULL" {
+    var result = ExplainResult{};
+    parseFilterLine(&result, "account_id IS NOT NULL", "events");
+    try std.testing.expectEqual(@as(usize, 0), result.predicate_count);
+}
+
+test "parseFilterLine skips AND/OR connectors" {
+    var result = ExplainResult{};
+    parseFilterLine(&result, "AND", "events");
+    parseFilterLine(&result, "OR", "events");
+    try std.testing.expectEqual(@as(usize, 0), result.predicate_count);
+}
+
+test "optional: prefix stripped from column names" {
+    var result = ExplainResult{};
+    parseFilterLine(&result, "optional: n_name='FRANCE'", "nation");
+    try std.testing.expect(result.predicate_count >= 1);
+    try std.testing.expectEqualStrings("n_name", result.predicates[0].column_name);
+}
