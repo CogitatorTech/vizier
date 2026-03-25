@@ -1,6 +1,6 @@
 # Vizier
 
-**A database advisor and finetuner for DuckDB.**
+**A physical design advisor for DuckDB.**
 
 ---
 
@@ -28,30 +28,22 @@ You feed Vizier your workload (a collection of queries), and it tells you what t
 Install Vizier from the hosted DuckDB extension repository, then use the workflow below.
 
 ```sql
-install
-vizier from 'https://cogitatortech.github.io/vizier/extensions';
-load
-vizier;
+install vizier from 'https://cogitatortech.github.io/vizier/extensions';
+load vizier;
 
 -- Capture your real queries
-select *
-from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
-select *
-from vizier_flush();
+select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
+select * from vizier_flush();
 
 -- Get recommendations
-select *
-from vizier_analyze();
-select *
-from vizier.recommendations;
+select * from vizier_analyze();
+select * from vizier.recommendations;
 -- Create index idx_events_account_id on events(account_id)
 -- Rewrite events sorted by (account_id, ts) for scan pruning
 
 -- Apply and measure the impact
-select *
-from vizier_apply(1);
-select *
-from vizier_benchmark('select * from events where account_id = 42', 10);
+select * from vizier_apply(1);
+select * from vizier_benchmark('select * from events where account_id = 42', 10);
 ```
 
 ## When to Use Vizier?
