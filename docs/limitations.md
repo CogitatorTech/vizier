@@ -15,11 +15,11 @@ Automatic capture (via DuckDB profiling output or a query log hook) is planned b
 
 Vizier uses two extraction strategies during a flush:
 
-1. **EXPLAIN-based extraction** (preferred): runs `EXPLAIN` on the captured query using DuckDB's own parser.
+1. EXPLAIN-based extraction (preferred deafult): runs `EXPLAIN` on the captured query using DuckDB's own parser.
    This produces accurate table references, filter predicates, and estimated row counts directly from the
    query plan. Note that it only works when the referenced tables exist in the current database.
 
-2. **Tokenizer-based extraction** (fallback): a hand-rolled tokenizer that parses SQL text without
+2. Tokenizer-based extraction (fallback): a hand-rolled tokenizer that parses SQL text without
    database access. Used when `EXPLAIN` fails (e.g., tables do not exist, or the query uses unsupported syntax).
 
 The tokenizer fallback has known limitations. It will miss or misparse:
@@ -63,12 +63,6 @@ and others by `region`), the sort and Parquet advisors pick the most frequent pa
 They do not report the tradeoff or warn that other queries may regress.
 
 Use `vizier_replay()` after applying a sort recommendation to check for regressions across the full workload.
-
-## Large API Surface
-
-Vizier exposes 22 functions, 8 macros, 5 views, 8 metadata tables, and 14 settings.
-Some of these may change or be removed in future versions.
-Pin your usage to specific Vizier versions if you depend on the API in scripts or pipelines.
 
 ## Best Suited for Persistent, Repeated Workloads
 
