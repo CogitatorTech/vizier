@@ -295,6 +295,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../limitations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Current Limitations
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -655,6 +674,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../limitations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Current Limitations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -930,7 +976,7 @@ Start DuckDB with <code>-unsigned</code>, or enable unsigned extensions in your 
 <p>Each recommendation includes a kind, target table, SQL to execute, score, and confidence level.</p>
 <h3 id="4-apply-a-recommendation">4. Apply a Recommendation<a class="headerlink" href="#4-apply-a-recommendation" title="Permanent link">&para;</a></h3>
 <p>Preview first with a dry run:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_apply</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">dry_run</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="k">true</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_apply</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">dry_run</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">true</span><span class="p">);</span>
 </code></pre></div>
 <p>Then apply:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_apply</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>

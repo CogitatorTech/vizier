@@ -293,6 +293,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="limitations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Current Limitations
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -548,6 +567,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="limitations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Current Limitations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -657,15 +703,14 @@ and summary tables to improve query performance.</p>
 <h2 id="why-vizier">Why Vizier?<a class="headerlink" href="#why-vizier" title="Permanent link">&para;</a></h2>
 <p>When you have a DuckDB database, you are typically on your own to figure out things like:</p>
 <ul>
-<li>Which columns need indexes?</li>
 <li>Should I rewrite my table sorted differently?</li>
 <li>What sort order should my Parquet exports use?</li>
 <li>Are any of my indexes redundant?</li>
 <li>Which queries are my bottleneck?</li>
 </ul>
-<p>Tools like <a href="https://github.com/powa-team/pg_qualstats">pg_qualstats</a> (for PostgreSQL) and
+<p>There are tools like <a href="https://github.com/powa-team/pg_qualstats">pg_qualstats</a> (for PostgreSQL) and
 <a href="https://learn.microsoft.com/en-us/sql/relational-databases/performance/database-engine-tuning-advisor?view=sql-server-ver17">Database Engine Tuning Advisor</a>
-(for SQL Server) solve these problems, but nothing equivalent exists for DuckDB.
+(for SQL Server) that try to solve these problems, but nothing equivalent exists for DuckDB.
 Vizier aims to fill that gap.</p>
 <h2 id="how-it-works">How It Works?<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
 <p>You feed Vizier your workload (a collection of queries), and it tells you what to change in your database to make it run faster.</p>
@@ -710,6 +755,7 @@ So you make the decision to apply at the end.</p>
 <li><a href="getting-started/">Getting Started</a></li>
 <li><a href="examples/">Examples</a></li>
 <li><a href="api-reference/">API Reference</a></li>
+<li><a href="limitations/">Current Limitations</a></li>
 </ul>
 
 
