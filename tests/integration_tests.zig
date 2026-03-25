@@ -1054,13 +1054,14 @@ test "analyze produces no_action for well-optimized tables" {
     const out = try runSql(testing.allocator,
         \\create table noact_t (id int, val varchar);
         \\insert into noact_t select i, 'v' from range(100) t(i);
-        \\select * from vizier_capture('select * from noact_t');
+        // A single group-by predicate won't trigger any advisor (below thresholds)
+        \\select * from vizier_capture('select val, count(*) from noact_t group by val');
         \\select * from vizier_flush();
         \\select * from vizier_analyze();
         \\select kind from vizier.recommendation_store where table_name = 'noact_t';
     );
     defer testing.allocator.free(out);
-    // A query with no filters should produce no_action (no predicates to optimize)
+    // Table has predicates but nothing actionable — should get no_action
     try expectContains(out, "no_action");
 }
 
