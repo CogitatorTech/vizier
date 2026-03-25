@@ -105,7 +105,7 @@ const create_session_log_sql =
 const insert_default_settings_sql =
     \\insert or ignore into vizier.settings (key, value, description) values
     \\  ('min_query_count', '1', 'Minimum query frequency before generating recommendations'),
-    \\  ('min_confidence', '0.4', 'Minimum confidence threshold for recommendations'),
+    \\  ('min_confidence', '0.2', 'Minimum score threshold for recommendations (lower values keep more)'),
     \\  ('benchmark_runs', '5', 'Default number of benchmark iterations'),
     \\  ('max_pending_captures', '4096', 'Maximum queries in capture buffer'),
     \\  ('auto_flush', 'false', 'Automatically flush after each capture'),

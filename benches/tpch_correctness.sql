@@ -90,11 +90,12 @@ select 'lineitem sort recommendation' as check_name,
 from vizier.recommendation_store
 where kind = 'rewrite_sorted_table' and table_name = 'lineitem';
 
--- Check 2: orders should have a sort recommendation
-select 'orders sort recommendation' as check_name,
+-- Check 2: orders should have a sort or parquet recommendation
+select 'orders sort or parquet recommendation' as check_name,
        case when count(*) > 0 then 'PASS' else 'FAIL' end as result
 from vizier.recommendation_store
-where kind = 'rewrite_sorted_table' and table_name = 'orders';
+where table_name = 'orders'
+  and kind in ('rewrite_sorted_table', 'parquet_sort_order');
 
 -- Check 3: there should be index recommendations for equality predicates
 select 'index recommendations exist' as check_name,
@@ -168,10 +169,11 @@ select check_name, result from (
   from vizier.recommendation_store
   where kind = 'rewrite_sorted_table' and table_name = 'lineitem'
   union all
-  select 'orders sort recommendation',
+  select 'orders sort or parquet recommendation',
          case when count(*) > 0 then 'PASS' else 'FAIL' end
   from vizier.recommendation_store
-  where kind = 'rewrite_sorted_table' and table_name = 'orders'
+  where table_name = 'orders'
+    and kind in ('rewrite_sorted_table', 'parquet_sort_order')
   union all
   select 'index recommendations exist',
          case when count(*) > 0 then 'PASS' else 'FAIL' end

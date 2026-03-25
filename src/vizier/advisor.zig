@@ -9,10 +9,13 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\insert into vizier.recommendation_store
     \\  (kind, table_name, columns_json, score, confidence, reason, sql_text,
     \\   estimated_gain, estimated_build_cost, estimated_maintenance_cost)
+    \\select kind, table_name, columns_json, score, confidence, reason, sql_text,
+    \\  estimated_gain, estimated_build_cost, estimated_maintenance_cost
+    \\from (
     \\select
-    \\  'create_index',
-    \\  p.table_name,
-    \\  '["' || p.column_name || '"]',
+    \\  'create_index' as kind,
+    \\  p.table_name as table_name,
+    \\  '["' || p.column_name || '"]' as columns_json,
     \\  least((p.freq + p.point_lookups + p.join_hits)::double
     \\    / (select value::double from vizier.settings where key = 'index_score_divisor'), 1.0)
     \\    * case
@@ -27,28 +30,28 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\           else 1.0
     \\    end
     \\    * case
-    \\      when coalesce(p.max_estimated_rows, 0) > 100000 then 1.5
-    \\      when coalesce(p.max_estimated_rows, 0) > 10000 then 1.3
-    \\      when coalesce(p.max_estimated_rows, 0) > 1000 then 1.1
+    \\      when coalesce(t.estimated_size, 0) > (select value::bigint from vizier.settings where key = 'large_table_bytes') then 1.3
+    \\      when coalesce(t.estimated_size, 0) > (select value::bigint from vizier.settings where key = 'large_table_bytes') / 10 then 1.0
+    \\      when coalesce(t.estimated_size, 0) > 0 then 0.7
     \\      else 1.0
-    \\    end,
+    \\    end as score,
     \\  case
     \\    when p.point_lookups > 0 then 0.95
     \\    when p.join_hits > 0 then 0.9
     \\    when p.freq >= 5 then 0.9
     \\    when p.freq >= 2 then 0.7
     \\    else 0.5
-    \\  end,
+    \\  end as confidence,
     \\  'Column ' || p.column_name || ' on ' || p.table_name || ': '
     \\    || p.freq || ' predicate(s)'
     \\    || case when p.point_lookups > 0 then ', ' || p.point_lookups || ' point lookup(s)' else '' end
     \\    || case when p.join_hits > 0 then ', ' || p.join_hits || ' join predicate(s)' else '' end
     \\    || case when coalesce(t.estimated_size, 0) > 100000000 then ' (high write cost: ' || (coalesce(t.estimated_size, 0) / 1000000)::bigint || 'MB table)' else '' end
-    \\    || case when coalesce(p.max_estimated_rows, 0) > 0 then ', ~' || p.max_estimated_rows || ' estimated rows scanned' else '' end,
-    \\  'create index idx_' || p.table_name || '_' || p.column_name || ' on ' || p.table_name || '(' || p.column_name || ')',
-    \\  least((p.freq + p.point_lookups + p.join_hits)::double / 5.0, 1.0),
-    \\  coalesce(t.estimated_size, 0)::double / 1000000000.0,
-    \\  case when coalesce(t.estimated_size, 0) > 100000000 then 0.3 else 0.1 end
+    \\    || case when coalesce(p.max_estimated_rows, 0) > 0 then ', ~' || p.max_estimated_rows || ' estimated rows scanned' else '' end as reason,
+    \\  'create index idx_' || p.table_name || '_' || p.column_name || ' on ' || p.table_name || '(' || p.column_name || ')' as sql_text,
+    \\  least((p.freq + p.point_lookups + p.join_hits)::double / 5.0, 1.0) as estimated_gain,
+    \\  coalesce(t.estimated_size, 0)::double / 1000000000.0 as estimated_build_cost,
+    \\  case when coalesce(t.estimated_size, 0) > 100000000 then 0.3 else 0.1 end as estimated_maintenance_cost
     \\from (
     \\  select
     \\    sub.table_name,
@@ -88,6 +91,8 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\    and r.columns_json = '["' || p.column_name || '"]'
     \\    and r.status = 'pending'
     \\)
+    \\) _idx
+    \\qualify row_number() over (partition by table_name order by score desc) <= 2
 ;
 
 /// SQL to run the sort/clustering advisor.
@@ -241,9 +246,9 @@ pub const parquet_partition_advisor_sql: [*:0]const u8 =
     \\  select 1 from vizier.recommendation_store r
     \\  where r.kind = 'parquet_partition'
     \\    and r.table_name = p.table_name
-    \\    and r.columns_json = '["' || p.column_name || '"]'
     \\    and r.status = 'pending'
     \\)
+    \\qualify row_number() over (partition by p.table_name order by p.freq desc) = 1
 ;
 
 /// SQL to run the parquet row group size advisor.
@@ -368,9 +373,9 @@ pub const join_path_advisor_sql: [*:0]const u8 =
     \\  select 1 from vizier.recommendation_store r
     \\  where r.kind = 'sort_for_join'
     \\    and r.table_name = p.table_name
-    \\    and r.columns_json = '["' || p.column_name || '"]'
     \\    and r.status = 'pending'
     \\)
+    \\qualify row_number() over (partition by p.table_name order by p.freq desc) = 1
 ;
 
 /// SQL to run the no-action advisor.
@@ -421,6 +426,13 @@ pub const all_advisor_sqls = [_][*:0]const u8{
     join_path_advisor_sql,
     no_action_advisor_sql,
 };
+
+/// SQL to prune low-scoring recommendations below the min_confidence threshold.
+pub const prune_low_score_sql: [*:0]const u8 =
+    \\delete from vizier.recommendation_store
+    \\where status = 'pending' and kind != 'no_action'
+    \\  and score < (select value::double from vizier.settings where key = 'min_confidence')
+;
 
 /// SQL to clear stale recommendations (optional, called before re-analysis).
 pub const clear_pending_sql: [*:0]const u8 =

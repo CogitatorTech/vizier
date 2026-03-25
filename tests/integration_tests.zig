@@ -273,6 +273,9 @@ test "analyze detects join predicates" {
 test "analyze generates parquet sort recommendations" {
     const out = try runSql(testing.allocator,
         \\select * from vizier_capture('select * from pq_events where account_id = 1 and ts >= ''2026-01-01''');
+        \\select * from vizier_capture('select * from pq_events where account_id = 2 and ts >= ''2026-02-01''');
+        \\select * from vizier_capture('select * from pq_events where account_id = 3 and ts >= ''2026-03-01''');
+        \\select * from vizier_capture('select * from pq_events where account_id = 4 and ts < ''2026-06-01''');
         \\select * from vizier_flush();
         \\select * from vizier_analyze();
         \\select kind, reason, sql_text from vizier.recommendations where kind = 'parquet_sort_order';
@@ -621,10 +624,13 @@ test "e2e: full capture-analyze-apply-benchmark loop" {
         \\create table e2e_orders as select i as id, i % 100 as customer_id, i * 1.5 as amount, '2026-01-01'::date + (i % 365)::integer as order_date from range(10000) t(i);
         \\create table e2e_customers as select i as id, 'cust_' || i as name, case when i % 3 = 0 then 'US' when i % 3 = 1 then 'EU' else 'APAC' end as region from range(100) t(i);
         //
-        // Capture a realistic workload
+        // Capture a realistic workload (repeated to boost scores above min_confidence)
         \\select * from vizier_capture('select * from e2e_orders where customer_id = 42');
         \\select * from vizier_capture('select * from e2e_orders where customer_id = 7');
         \\select * from vizier_capture('select * from e2e_orders where customer_id = 99 and order_date >= date ''2026-06-01''');
+        \\select * from vizier_capture('select * from e2e_orders where customer_id = 50');
+        \\select * from vizier_capture('select * from e2e_orders where customer_id = 1');
+        \\select * from vizier_capture('select * from e2e_orders where customer_id = 33');
         \\select * from vizier_capture('select o.id, c.name from e2e_orders o join e2e_customers c on o.customer_id = c.id where c.region = ''US''');
         \\select * from vizier_capture('select o.id, c.name from e2e_orders o join e2e_customers c on o.customer_id = c.id where c.region = ''EU''');
         \\select * from vizier_capture('select customer_id, sum(amount) from e2e_orders group by customer_id');
@@ -704,13 +710,17 @@ test "benchmark: TPC-H-like workload generates meaningful recommendations" {
         \\create table lineitem as select i as l_orderkey, i % 200 as l_partkey, i % 10 as l_suppkey, (i * 0.99)::double as l_extendedprice, (random() * 0.1)::double as l_discount, '2024-01-01'::date + (i % 730)::integer as l_shipdate from range(50000) t(i);
         \\create table orders as select i as o_orderkey, i % 1000 as o_custkey, (i * 10.0)::double as o_totalprice, '2024-01-01'::date + (i % 730)::integer as o_orderdate, case when i % 3 = 0 then 'F' else 'O' end as o_orderstatus from range(10000) t(i);
         //
-        // Simulate TPC-H-like queries
+        // Simulate TPC-H-like queries (repeated to boost scores above min_confidence)
         \\select * from vizier_capture('select l_orderkey, sum(l_extendedprice * (1 - l_discount)) from lineitem where l_shipdate >= date ''2024-01-01'' and l_shipdate < date ''2025-01-01'' group by l_orderkey');
         \\select * from vizier_capture('select l_orderkey, sum(l_extendedprice) from lineitem where l_shipdate between date ''2024-06-01'' and date ''2024-12-31'' group by l_orderkey');
+        \\select * from vizier_capture('select l_orderkey, sum(l_extendedprice) from lineitem where l_shipdate >= date ''2024-03-01'' and l_shipdate < date ''2024-09-01'' group by l_orderkey');
+        \\select * from vizier_capture('select l_orderkey, sum(l_extendedprice) from lineitem where l_shipdate >= date ''2024-09-01'' group by l_orderkey');
         \\select * from vizier_capture('select o_orderstatus, count(*) from orders where o_orderdate >= date ''2024-01-01'' group by o_orderstatus');
         \\select * from vizier_capture('select o_orderstatus, sum(o_totalprice) from orders where o_orderdate >= date ''2024-06-01'' group by o_orderstatus');
+        \\select * from vizier_capture('select o_orderstatus, count(*) from orders where o_orderdate < date ''2024-06-01'' group by o_orderstatus');
         \\select * from vizier_capture('select * from orders where o_custkey = 42');
         \\select * from vizier_capture('select * from orders where o_custkey = 99');
+        \\select * from vizier_capture('select * from orders where o_custkey = 500');
         \\select * from vizier_flush();
         //
         \\select * from vizier_analyze();
@@ -943,11 +953,14 @@ test "predicates with single quotes in names do not break flush" {
 }
 
 test "vizier_compare logs to applied_actions for rollback" {
-    // Regression test for Bug 7: vizier_compare must log to applied_actions
-    // so the change shows in change_history and can be rolled back.
+    // Regression test for Bug 7: vizier_compare must log to applied_actions.
+    // Uses 50K rows and 5 captures to produce scores above min_confidence.
     const out = try runSql(testing.allocator,
         \\create table test_compare_t (id int, val varchar);
-        \\insert into test_compare_t select i, 'v' from range(100) t(i);
+        \\insert into test_compare_t select i, 'v' from range(50000) t(i);
+        \\select * from vizier_capture('select * from test_compare_t where id = 42');
+        \\select * from vizier_capture('select * from test_compare_t where id = 42');
+        \\select * from vizier_capture('select * from test_compare_t where id = 42');
         \\select * from vizier_capture('select * from test_compare_t where id = 42');
         \\select * from vizier_capture('select * from test_compare_t where id = 42');
         \\select * from vizier_flush();
