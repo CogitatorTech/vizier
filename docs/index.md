@@ -59,7 +59,7 @@ Vizier is most useful for:
 
 Vizier is less useful for:
 
-- Ad-hoc notebook analysis (no repeating patterns)
+- Ad-hoc notebook analysis (no repeating patterns).
 - Tiny datasets (DuckDB is already fast).
 - Read-only Parquet scans like reading Parquet files on an S3 bucket.
 
