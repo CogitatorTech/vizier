@@ -26,9 +26,12 @@ Vizier aims to fill that gap.
 
 You feed Vizier your workload (a collection of queries), and it tells you what to change in your database to make it run faster.
 
-The example below shows the typical workflow of using Vizier.
+Install Vizier from the hosted DuckDB extension repository, then use the workflow below.
 
 ```sql
+install vizier from 'https://cogitatortech.github.io/vizier/extensions';
+load vizier;
+
 -- Capture your real queries
 select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
 select * from vizier_flush();

@@ -18,7 +18,7 @@ A database advisor and finetuner for DuckDB
 Vizier is a DuckDB extension that analyzes your query workload and recommends physical design changes like indexes, sort orders, Parquet layouts,
 and summary tables to improve query performance.
 
-When you have a DuckDB database, you are on your own to figure out things like:
+When you have a DuckDB database, you are typically on your own to figure out things like:
 
 - Which columns need indexes?
 - Should I rewrite my table sorted differently?
@@ -55,29 +55,33 @@ See [ROADMAP.md](ROADMAP.md) for the list of implemented and planned features.
 
 ### Quickstart
 
-#### Install from a Release
+#### Install in DuckDB
 
-Download the platform-specific extension from the [latest release](https://github.com/CogitatorTech/vizier/releases/latest), then install that asset URL in DuckDB before `load vizier;`.
-
-Replace `v0.1.0` with the release tag you want, and choose the asset that matches your platform:
-
-- Linux AMD64: `vizier-linux-amd64.duckdb_extension`
-- Linux ARM64: `vizier-linux-arm64.duckdb_extension`
-- Linux AMD64 (musl): `vizier-linux-amd64-musl.duckdb_extension`
-- Linux ARM64 (musl): `vizier-linux-arm64-musl.duckdb_extension`
-- macOS ARM64: `vizier-macos-arm64.duckdb_extension`
-- Windows AMD64: `vizier-windows-amd64.duckdb_extension`
-- Windows ARM64: `vizier-windows-arm64.duckdb_extension`
-- FreeBSD AMD64: `vizier-freebsd-amd64.duckdb_extension`
+Install Vizier from the hosted DuckDB extension repository:
 
 ```sql
-install 'https://github.com/CogitatorTech/vizier/releases/download/v0.1.0/vizier-linux-amd64.duckdb_extension';
+install vizier from 'https://cogitatortech.github.io/vizier/extensions';
 load vizier;
 ```
+
+The hosted repository currently mirrors binaries for DuckDB `v1.2.0` through `v1.5.0`.
 
 > [!IMPORTANT]
 > Vizier is currently not available on DuckDB's community extensions repository and is distributed as an unsigned extension.
 > So you need to start DuckDB with `-unsigned`, or enable unsigned extensions in your client before installing and loading Vizier.
+
+#### Download from the Release Page
+
+Open the [latest release](https://github.com/CogitatorTech/vizier/releases/latest) for release notes and platform-specific zip downloads:
+
+- Linux AMD64: `vizier-linux-amd64.zip`
+- Linux ARM64: `vizier-linux-arm64.zip`
+- Linux AMD64 (musl): `vizier-linux-amd64-musl.zip`
+- Linux ARM64 (musl): `vizier-linux-arm64-musl.zip`
+- macOS ARM64: `vizier-macos-arm64.zip`
+- Windows AMD64: `vizier-windows-amd64.zip`
+- Windows ARM64: `vizier-windows-arm64.zip`
+- FreeBSD AMD64: `vizier-freebsd-amd64.zip`
 
 #### Build from Source
 
@@ -98,10 +102,10 @@ make duckdb
 
 #### Simple Example
 
-The example below assumes you already picked the correct `.duckdb_extension` asset from the release page for your platform.
+The example below assumes you install Vizier from the hosted extension repository.
 
 ```sql
-install 'https://github.com/CogitatorTech/vizier/releases/download/v0.1.0/vizier-linux-amd64.duckdb_extension';
+install vizier from 'https://cogitatortech.github.io/vizier/extensions';
 load vizier;
 
 -- Capture queries from your workload

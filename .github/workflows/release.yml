@@ -18,6 +18,7 @@ env:
   EXTENSION_API_VERSION: v1.2.0
   ZIG_VERSION: 0.15.2
   DUCKDB_VERSION: v1.5.0
+  SUPPORTED_DUCKDB_VERSIONS: v1.2.0,v1.2.1,v1.2.2,v1.3.0,v1.3.1,v1.3.2,v1.4.0,v1.4.1,v1.4.2,v1.4.3,v1.5.0
 
 jobs:
   call-tests:
@@ -97,15 +98,12 @@ jobs:
           cat test_output.txt
           grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
 
-      - name: Upload raw extension asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload repository artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./zig-out/lib/linux_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          asset_name: ${{ env.EXTENSION_NAME }}-linux-amd64.duckdb_extension
-          asset_content_type: application/octet-stream
+          name: linux_amd64
+          path: zig-out/lib/linux_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          if-no-files-found: error
 
       - name: Package release asset
         run: |
@@ -164,15 +162,12 @@ jobs:
           cat test_output.txt
           grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
 
-      - name: Upload raw extension asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload repository artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          asset_name: ${{ env.EXTENSION_NAME }}-linux-arm64.duckdb_extension
-          asset_content_type: application/octet-stream
+          name: linux_arm64
+          path: zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          if-no-files-found: error
 
       - name: Package release asset
         run: |
@@ -227,15 +222,12 @@ jobs:
             exit 1
           fi
 
-      - name: Upload raw extension asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload repository artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
-          asset_name: ${{ env.EXTENSION_NAME }}-linux-amd64-musl.duckdb_extension
-          asset_content_type: application/octet-stream
+          name: linux_amd64_musl
+          path: zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
+          if-no-files-found: error
 
       - name: Package release asset
         run: |
@@ -290,15 +282,12 @@ jobs:
             exit 1
           fi
 
-      - name: Upload raw extension asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload repository artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
-          asset_name: ${{ env.EXTENSION_NAME }}-linux-arm64-musl.duckdb_extension
-          asset_content_type: application/octet-stream
+          name: linux_arm64_musl
+          path: zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
+          if-no-files-found: error
 
       - name: Package release asset
         run: |
@@ -357,15 +346,12 @@ jobs:
           cat test_output.txt
           grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
 
-      - name: Upload raw extension asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload repository artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./zig-out/lib/osx_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          asset_name: ${{ env.EXTENSION_NAME }}-macos-arm64.duckdb_extension
-          asset_content_type: application/octet-stream
+          name: osx_arm64
+          path: zig-out/lib/osx_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          if-no-files-found: error
 
       - name: Package release asset
         run: |
@@ -426,15 +412,12 @@ jobs:
           cat test_output.txt
           grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
 
-      - name: Upload raw extension asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload repository artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./zig-out/lib/windows_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          asset_name: ${{ env.EXTENSION_NAME }}-windows-amd64.duckdb_extension
-          asset_content_type: application/octet-stream
+          name: windows_amd64
+          path: zig-out/lib/windows_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          if-no-files-found: error
 
       - name: Package release asset
         shell: pwsh
@@ -492,15 +475,12 @@ jobs:
             exit 1
           fi
 
-      - name: Upload raw extension asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload repository artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./zig-out/lib/windows_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          asset_name: ${{ env.EXTENSION_NAME }}-windows-arm64.duckdb_extension
-          asset_content_type: application/octet-stream
+          name: windows_arm64
+          path: zig-out/lib/windows_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          if-no-files-found: error
 
       - name: Package release asset
         shell: pwsh
@@ -556,15 +536,12 @@ jobs:
             exit 1
           fi
 
-      - name: Upload raw extension asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload repository artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
-          asset_name: ${{ env.EXTENSION_NAME }}-freebsd-amd64.duckdb_extension
-          asset_content_type: application/octet-stream
+          name: freebsd_amd64
+          path: zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          if-no-files-found: error
 
       - name: Package release asset
         run: |
@@ -579,3 +556,61 @@ jobs:
           asset_path: ./${{ env.EXTENSION_NAME }}-freebsd-amd64.zip
           asset_name: ${{ env.EXTENSION_NAME }}-freebsd-amd64.zip
           asset_content_type: application/zip
+
+  deploy-pages:
+    name: Deploy docs and extension repository
+    runs-on: ubuntu-latest
+    needs:
+      - build-linux-amd64
+      - build-linux-arm64
+      - build-linux-amd64-musl
+      - build-linux-arm64-musl
+      - build-macos-arm64
+      - build-windows-amd64
+      - build-windows-arm64
+      - build-freebsd-amd64
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install documentation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          uv sync
+
+      - name: Build documentation site
+        run: |
+          source .venv/bin/activate
+          make docs
+
+      - name: Download repository artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Stage extension repository
+        run: |
+          python scripts/stage_extension_repository.py \
+            --artifacts-root artifacts \
+            --site-root site \
+            --extension-name ${{ env.EXTENSION_NAME }} \
+            --duckdb-versions ${{ env.SUPPORTED_DUCKDB_VERSIONS }}
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          publish_branch: gh-pages
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: "docs: Deploy site and extension repository from ${{ github.sha }}"
