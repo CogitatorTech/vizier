@@ -65,7 +65,7 @@ Vizier is most useful for:
 - Understanding workload patterns. `vizier.workload_summary`, `vizier.inspect_table()`, and `vizier.overview()` give you a quick picture of which
   tables and columns are under the most pressure. This can be useful when inheriting a database you did not build.
 
-Note that Vizier is less useful for:
+Vizier is less useful for:
 
 - Ad-hoc notebook analysis (no repeating patterns)
 - Tiny datasets (DuckDB is already fast).
