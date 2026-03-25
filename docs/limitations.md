@@ -15,7 +15,7 @@ Automatic capture (via DuckDB profiling output or a query log hook) is planned b
 
 Vizier uses two extraction strategies during a flush:
 
-1. EXPLAIN-based extraction (preferred deafult): runs `EXPLAIN` on the captured query using DuckDB's own parser.
+1. EXPLAIN-based extraction (preferred default): runs `EXPLAIN` on the captured query using DuckDB's own parser.
    This produces accurate table references, filter predicates, and estimated row counts directly from the
    query plan. Note that it only works when the referenced tables exist in the current database.
 

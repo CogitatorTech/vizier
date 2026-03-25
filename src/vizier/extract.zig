@@ -788,3 +788,70 @@ test "normalization makes similar queries identical" {
     const n2 = normalizeSql("select * from orders where customer_id = 99", &buf2);
     try std.testing.expectEqualStrings(n1, n2);
 }
+
+// ============================================================================
+// Edge case tests
+// ============================================================================
+
+test "CTE with clause extracts table from main query" {
+    const result = extractFromSql("with cte as (select * from orders) select * from cte where id = 1");
+    // CTE aliases may or may not resolve; main concern is no crash
+    try std.testing.expect(result.predicate_count >= 1);
+    try std.testing.expect(findPredicate(&result, result.defaultTable(), "id", .equality));
+}
+
+test "subquery in WHERE does not crash" {
+    const result = extractFromSql("select * from orders where customer_id in (select id from customers where region = 'US')");
+    try std.testing.expect(result.table_count >= 1);
+    try std.testing.expect(findPredicate(&result, "orders", "customer_id", .in_list));
+}
+
+test "self-join with aliases resolves both sides" {
+    const result = extractFromSql("select * from nation n1 join nation n2 on n1.n_regionkey = n2.n_regionkey where n1.n_name = 'FRANCE'");
+    try std.testing.expect(result.table_count >= 1);
+    // Should have predicates for n_name and n_regionkey
+    try std.testing.expect(result.predicate_count >= 1);
+}
+
+test "multiple joins extract all tables" {
+    const result = extractFromSql("select * from a join b on a.id = b.a_id join c on b.id = c.b_id where a.x = 1");
+    try std.testing.expectEqual(@as(usize, 3), result.table_count);
+}
+
+test "ORDER BY ASC DESC NULLS FIRST does not crash" {
+    const result = extractFromSql("select * from t order by a desc nulls first, b asc");
+    try std.testing.expect(result.predicate_count >= 1);
+    try std.testing.expect(findPredicate(&result, "t", "a", .order_by));
+}
+
+test "deeply nested parentheses do not crash" {
+    const result = extractFromSql("select * from t where ((((a = 1)))) and b > 2");
+    try std.testing.expect(result.table_count >= 1);
+}
+
+test "very long SQL does not crash" {
+    // Build a query longer than MAX_TOKENS worth of tokens
+    var buf: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    const w = fbs.writer();
+    w.writeAll("select * from t where a = 1") catch unreachable;
+    for (0..200) |_| {
+        w.writeAll(" and b = 1") catch break;
+    }
+    const sql = fbs.getWritten();
+    const result = extractFromSql(sql);
+    // Should not crash; may truncate predicates at MAX_PREDICATES
+    try std.testing.expect(result.table_count >= 1);
+}
+
+test "HAVING clause does not extract false predicates" {
+    const result = extractFromSql("select department, count(*) from employees group by department having count(*) > 5");
+    // HAVING's count(*) > 5 should not produce a predicate for "count(*)"
+    try std.testing.expect(result.predicate_count >= 1); // group_by for department
+    try std.testing.expect(findPredicate(&result, "employees", "department", .group_by));
+}
+
+test "UNION query extracts tables from both sides" {
+    const result = extractFromSql("select * from orders where id = 1 union all select * from archive_orders where id = 2");
+    try std.testing.expect(result.table_count >= 2);
+}

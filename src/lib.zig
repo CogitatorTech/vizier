@@ -68,6 +68,15 @@ fn escapeSql(input: []const u8, buf: []u8) []const u8 {
     return buf[0..i];
 }
 
+/// Check if a table name exists in a comma-separated list of real table names.
+fn tableExistsIn(name: []const u8, csv_list: []const u8) bool {
+    var iter = std.mem.splitScalar(u8, csv_list, ',');
+    while (iter.next()) |entry| {
+        if (std.mem.eql(u8, entry, name)) return true;
+    }
+    return false;
+}
+
 /// Extract predicates/tables from a SQL string and store in metadata tables.
 /// Called from flush_pending() in extension.c with the open connection.
 ///
@@ -99,14 +108,35 @@ pub export fn zig_extract_and_store(
         tokenizer_result;
 
     const estimated_rows = explain_result.estimated_rows;
+    const used_explain = explain_result.ok and explain_result.predicate_count > 0;
+
+    // Build a set of real table names to filter out aliases.
+    // Only applied when using the tokenizer fallback with real tables in the DB,
+    // to catch alias leakage (n1, l1, etc.) without breaking capture of queries
+    // that reference tables not yet created.
+    var real_tables_buf: [4096]u8 = undefined;
+    const real_tables_str = if (!used_explain)
+        sql_runner.queryFirstVarchar(
+            conn,
+            "select string_agg(table_name, ',') from duckdb_tables() where schema_name not in ('vizier', 'information_schema')\x00",
+            0,
+            &real_tables_buf,
+        ) orelse ""
+    else
+        @as([]const u8, "");
 
     // Delete existing predicates for this signature
     var del_buf: [256]u8 = undefined;
     const del_sql = std.fmt.bufPrint(&del_buf, "delete from vizier.workload_predicates where query_signature = '{s}'\x00", .{sig}) catch return false;
     sql_runner.runOnConn(conn, @ptrCast(del_sql.ptr)) catch {};
 
-    // Insert each predicate (escape table/column names to handle single quotes)
+    // Insert each predicate (skip empty names, aliases, and escape for SQL safety)
     for (result.predicateSlice()) |pred| {
+        if (pred.table_name.len == 0 or pred.column_name.len == 0) continue;
+
+        // Skip predicates referencing non-existent tables (alias leakage)
+        if (real_tables_str.len > 0 and !tableExistsIn(pred.table_name, real_tables_str)) continue;
+
         var esc_table_buf: [256]u8 = undefined;
         var esc_col_buf: [256]u8 = undefined;
         const esc_table = escapeSql(pred.table_name, &esc_table_buf);
@@ -157,6 +187,9 @@ pub export fn zig_run_all_advisors(conn: duckdb.duckdb_connection) callconv(.c) 
             failures += 1;
         };
     }
+
+    // Prune recommendations below min_confidence threshold
+    sql_runner.runOnConn(conn, advisor.prune_low_score_sql) catch {};
 
     return failures;
 }
