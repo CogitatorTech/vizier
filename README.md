@@ -21,7 +21,6 @@ and summary tables to improve query performance.
 
 When you have a DuckDB database, you are typically on your own to figure out things like:
 
-- Which columns need indexes?
 - Should I rewrite my table sorted differently?
 - What sort order should my Parquet exports use?
 - Are any of my indexes redundant?
