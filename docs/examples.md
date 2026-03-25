@@ -1,9 +1,9 @@
 # Examples
 
-Before running the examples below, open the [latest release](https://github.com/CogitatorTech/vizier/releases/latest), pick the `.duckdb_extension` asset for your platform, copy its download URL, then install that asset URL and `load vizier;`.
+Before running the examples below, install Vizier from the hosted DuckDB extension repository and `load vizier;`.
 
 ```sql
-install 'https://github.com/CogitatorTech/vizier/releases/download/v0.1.0/vizier-linux-amd64.duckdb_extension';
+install vizier from 'https://cogitatortech.github.io/vizier/extensions';
 load vizier;
 ```
 
