@@ -124,7 +124,9 @@ Replace frequency-based scoring with cost-aware scoring that factors in query pe
 
 - [x] Recommendation weighting by `total_time_ms * execution_count` instead of frequency alone
 - [x] Configurable scoring weights via `vizier.settings`
-- [ ] `EXPLAIN` cost estimates (rows scanned and optimizer cost) for improvement prediction before applying
+- [x] `EXPLAIN`-based predicate extraction with estimated row counts from query plans
+- [x] Estimated rows factored into index advisor scoring
+- [ ] Full optimizer cost comparison (before vs after) for improvement prediction before applying
 
 ### Web Dashboard
 

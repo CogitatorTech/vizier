@@ -4,6 +4,7 @@
 comptime {
     _ = @import("vizier/capture.zig");
     _ = @import("vizier/extract.zig");
+    _ = @import("vizier/explain.zig");
     _ = @import("vizier/inspect.zig");
     _ = @import("vizier/advisor.zig");
 }

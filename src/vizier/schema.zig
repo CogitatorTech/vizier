@@ -16,7 +16,8 @@ const create_workload_queries_sql =
     \\    avg_time_ms double default 0,
     \\    p95_time_ms double default 0,
     \\    tables_json varchar default '[]',
-    \\    columns_json varchar default '[]'
+    \\    columns_json varchar default '[]',
+    \\    estimated_rows bigint default 0
     \\)
 ;
 

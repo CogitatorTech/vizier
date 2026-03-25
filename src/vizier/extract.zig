@@ -56,8 +56,8 @@ pub const TableRef = struct {
 };
 
 const MAX_TOKENS = 1024;
-const MAX_TABLES = 32;
-const MAX_PREDICATES = 64;
+pub const MAX_TABLES = 32;
+pub const MAX_PREDICATES = 64;
 
 pub const ExtractionResult = struct {
     tables: [MAX_TABLES]TableRef = undefined,

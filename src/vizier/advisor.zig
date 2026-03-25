@@ -25,6 +25,12 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\        then (select value::double from vizier.settings where key = 'cost_weight_selectivity')
     \\           when coalesce(p.min_selectivity, 1.0) < 0.1 then 1.2
     \\           else 1.0
+    \\    end
+    \\    * case
+    \\      when coalesce(p.max_estimated_rows, 0) > 100000 then 1.5
+    \\      when coalesce(p.max_estimated_rows, 0) > 10000 then 1.3
+    \\      when coalesce(p.max_estimated_rows, 0) > 1000 then 1.1
+    \\      else 1.0
     \\    end,
     \\  case
     \\    when p.point_lookups > 0 then 0.95
@@ -37,7 +43,8 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\    || p.freq || ' predicate(s)'
     \\    || case when p.point_lookups > 0 then ', ' || p.point_lookups || ' point lookup(s)' else '' end
     \\    || case when p.join_hits > 0 then ', ' || p.join_hits || ' join predicate(s)' else '' end
-    \\    || case when coalesce(t.estimated_size, 0) > 100000000 then ' (high write cost: ' || (coalesce(t.estimated_size, 0) / 1000000)::bigint || 'MB table)' else '' end,
+    \\    || case when coalesce(t.estimated_size, 0) > 100000000 then ' (high write cost: ' || (coalesce(t.estimated_size, 0) / 1000000)::bigint || 'MB table)' else '' end
+    \\    || case when coalesce(p.max_estimated_rows, 0) > 0 then ', ~' || p.max_estimated_rows || ' estimated rows scanned' else '' end,
     \\  'create index idx_' || p.table_name || '_' || p.column_name || ' on ' || p.table_name || '(' || p.column_name || ')',
     \\  least((p.freq + p.point_lookups + p.join_hits)::double / 5.0, 1.0),
     \\  coalesce(t.estimated_size, 0)::double / 1000000000.0,
@@ -50,7 +57,8 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\    sum(case when sub.is_point_lookup then 1 else 0 end) as point_lookups,
     \\    sum(case when sub.is_join then 1 else 0 end) as join_hits,
     \\    sum(coalesce(sub.query_impact, 0.0)) as total_impact,
-    \\    min(coalesce(sub.avg_selectivity, 1.0)) as min_selectivity
+    \\    min(coalesce(sub.avg_selectivity, 1.0)) as min_selectivity,
+    \\    max(coalesce(sub.estimated_rows, 0)) as max_estimated_rows
     \\  from (
     \\    select p1.*,
     \\      (select count(*) from vizier.workload_predicates p2
@@ -62,7 +70,10 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\      ) like '%,%' as is_join,
     \\      (select w.total_time_ms * w.execution_count from vizier.workload_queries w
     \\        where w.query_signature = p1.query_signature
-    \\      ) as query_impact
+    \\      ) as query_impact,
+    \\      (select w.estimated_rows from vizier.workload_queries w
+    \\        where w.query_signature = p1.query_signature
+    \\      ) as estimated_rows
     \\    from vizier.workload_predicates p1
     \\    where p1.predicate_kind in ('equality', 'in_list')
     \\  ) sub
