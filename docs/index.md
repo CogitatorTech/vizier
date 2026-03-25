@@ -18,8 +18,8 @@ When you have a DuckDB database, you are typically on your own to figure out thi
 
 There are tools like [pg_qualstats](https://github.com/powa-team/pg_qualstats) (for PostgreSQL) and
 [Database Engine Tuning Advisor](https://learn.microsoft.com/en-us/sql/relational-databases/performance/database-engine-tuning-advisor?view=sql-server-ver17)
-(for SQL Server) that try to solve these problems, but nothing equivalent exists for DuckDB.
-Vizier aims to fill that gap.
+(for SQL Server) that try to solve these kinds of problems, but nothing equivalent exists for DuckDB.
+Vizier is a step towards filling that gap.
 
 ## How It Works?
 
