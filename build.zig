@@ -101,7 +101,6 @@ pub fn build(b: *std.Build) void {
     const inspect_module = b.addModule("vizier/inspect", .{
         .root_source_file = b.path("src/vizier/inspect.zig"),
     });
-
     const prop_test_module = b.createModule(.{
         .root_source_file = b.path("tests/property_tests.zig"),
         .target = target,

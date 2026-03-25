@@ -181,3 +181,128 @@ test "property: well-formed SELECT always extracts a table" {
         .{ .num_runs = 300, .seed = 42 },
     );
 }
+
+// ============================================================================
+// Property: normalization never crashes and always produces output
+// ============================================================================
+
+fn prop_normalize_does_not_crash(input: []const u8) !void {
+    var buf: [4096]u8 = undefined;
+    const result = extract.normalizeSql(input, &buf);
+    _ = result;
+}
+
+test "property: normalization handles arbitrary input" {
+    try minish.check(
+        testing.allocator,
+        gen.string(.{ .min_len = 0, .max_len = 512 }),
+        prop_normalize_does_not_crash,
+        .{ .num_runs = 500, .seed = 42 },
+    );
+}
+
+// ============================================================================
+// Property: extraction result predicates always reference known tables
+// ============================================================================
+
+fn prop_predicates_reference_extracted_tables(input: []const u8) !void {
+    const result = extract.extractFromSql(input);
+    const tables = result.tableSlice();
+    for (result.predicateSlice()) |pred| {
+        if (pred.table_name.len == 0) continue;
+        // Each predicate's table should either match a table name or an alias
+        var found = false;
+        for (tables) |t| {
+            if (std.mem.eql(u8, pred.table_name, t.name)) {
+                found = true;
+                break;
+            }
+            if (t.alias) |a| {
+                if (std.mem.eql(u8, pred.table_name, a)) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        // If no tables extracted, predicate uses defaultTable which may be empty
+        if (tables.len == 0) continue;
+        // The predicate table should be from the extracted tables (or resolved alias)
+        try testing.expect(found);
+    }
+}
+
+test "property: predicates reference extracted tables" {
+    try minish.check(
+        testing.allocator,
+        gen.string(.{ .min_len = 10, .max_len = 256 }),
+        prop_predicates_reference_extracted_tables,
+        .{ .num_runs = 500, .seed = 42 },
+    );
+}
+
+// ============================================================================
+// Property: hash distribution (no constant output)
+// ============================================================================
+
+fn prop_hash_not_constant(input: []const u8) !void {
+    if (input.len < 2) return;
+    const h1 = capture.hashQuery(input);
+    const h2 = capture.hashQuery(input[1..]);
+    // Different inputs should (almost certainly) produce different hashes
+    // This won't always hold due to collisions, but with 64-bit hashes
+    // the probability is negligible for 500 runs
+    if (!std.mem.eql(u8, input, input[1..])) {
+        try testing.expect(h1 != h2);
+    }
+}
+
+test "property: hash varies for different inputs" {
+    try minish.check(
+        testing.allocator,
+        gen.string(.{ .min_len = 2, .max_len = 128 }),
+        prop_hash_not_constant,
+        .{ .num_runs = 500, .seed = 42 },
+    );
+}
+
+// ============================================================================
+// Property: extraction of JOIN queries always finds at least 2 tables
+// ============================================================================
+
+fn prop_join_extracts_multiple_tables(input: []const u8) !void {
+    // Build a JOIN query with random table names
+    var name1_buf: [32]u8 = undefined;
+    var name2_buf: [32]u8 = undefined;
+    var n1: usize = 0;
+    var n2: usize = 0;
+
+    for (input) |c| {
+        if (n1 < 31 and std.ascii.isAlphabetic(c)) {
+            name1_buf[n1] = c;
+            n1 += 1;
+        }
+    }
+    // Use second half for name2
+    const mid = input.len / 2;
+    for (input[mid..]) |c| {
+        if (n2 < 31 and std.ascii.isAlphabetic(c)) {
+            name2_buf[n2] = c;
+            n2 += 1;
+        }
+    }
+    if (n1 == 0 or n2 == 0) return;
+    if (std.mem.eql(u8, name1_buf[0..n1], name2_buf[0..n2])) return;
+
+    const t1 = name1_buf[0..n1];
+    const t2 = name2_buf[0..n2];
+
+    var sql_buf: [256]u8 = undefined;
+    const sql = std.fmt.bufPrint(&sql_buf, "select * from {s} join {s} on {s}.id = {s}.id", .{ t1, t2, t1, t2 }) catch return;
+
+    const result = extract.extractFromSql(sql);
+
+    // Skip if either name is a SQL keyword (would not be parsed as table)
+    if (extract.isKeyword(t1) or extract.isKeyword(t2)) return;
+
+    try testing.expect(result.table_count >= 2);
+}

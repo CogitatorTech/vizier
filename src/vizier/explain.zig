@@ -314,7 +314,7 @@ fn addTable(result: *ExplainResult, name: []const u8) void {
 /// Check if a string looks like a valid SQL identifier (alphanumeric, underscores).
 /// Rejects strings containing spaces, pipes, colons, parentheses, hash signs,
 /// or other characters that indicate EXPLAIN plan formatting leaked through.
-fn isValidIdentifier(name: []const u8) bool {
+pub fn isValidIdentifier(name: []const u8) bool {
     if (name.len == 0 or name.len > 128) return false;
     for (name) |c| {
         if ((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or
