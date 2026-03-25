@@ -163,3 +163,22 @@ If you have a DuckDB JSON profiling file:
 select * from vizier_import_profile('/path/to/profile.json');
 select * from vizier_flush();
 ```
+
+## Import from dbt
+
+If you use [dbt](https://www.getdbt.com/) with DuckDB, you can import your dbt run results into Vizier.
+The [import_dbt.py](https://github.com/CogitatorTech/vizier/blob/main/scripts/import_dbt.py) script reads compiled SQL from `manifest.json` and execution timing from `run_results.json`:
+
+```bash
+# Import all successful model runs
+python scripts/import_dbt.py --db my_database.duckdb
+
+# Only import models that took longer than 0.5 seconds
+python scripts/import_dbt.py --db my_database.duckdb --min-time 0.5
+
+# Preview what would be imported without executing
+python scripts/import_dbt.py --db my_database.duckdb --dry-run
+```
+
+By default, the script reads from the `target/` directory.
+Use `--target` to point to a different location.
