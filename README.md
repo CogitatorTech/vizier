@@ -4,6 +4,7 @@
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/CogitatorTech/vizier/tests.yml?label=tests&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/actions/workflows/tests.yml)
 [![Benchmarks](https://img.shields.io/github/actions/workflow/status/CogitatorTech/vizier/benchmarks.yml?label=benchmarks&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/actions/workflows/benchmarks.yml)
+[![Docs](https://img.shields.io/badge/docs-read-007ec6?label=docs&style=flat&labelColor=282c34&logo=readthedocs)](https://github.com/CogitatorTech/vizier/)
 [![License](https://img.shields.io/badge/license-MIT-007ec6?label=license&style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/CogitatorTech/vizier/blob/main/LICENSE)
 [![Zig Version](https://img.shields.io/badge/Zig-0.15.2-orange?logo=zig&labelColor=282c34)](https://ziglang.org/download/)
 [![Release](https://img.shields.io/github/release/CogitatorTech/vizier.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/releases/latest)
