@@ -446,6 +446,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#when-to-use-vizier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use Vizier?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-vizier-is-not" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -643,6 +654,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#when-to-use-vizier" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use Vizier?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-vizier-is-not" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -696,7 +718,7 @@
 
 
 <h1 id="vizier">Vizier<a class="headerlink" href="#vizier" title="Permanent link">&para;</a></h1>
-<p><strong>A database advisor and finetuner for DuckDB.</strong></p>
+<p><strong>A physical design advisor for DuckDB.</strong></p>
 <hr />
 <p>Vizier is a DuckDB extension that analyzes your (query) workload and recommends physical design changes like indexes, sort orders, Parquet layouts,
 and summary tables to improve query performance.</p>
@@ -710,8 +732,8 @@ and summary tables to improve query performance.</p>
 </ul>
 <p>There are tools like <a href="https://github.com/powa-team/pg_qualstats">pg_qualstats</a> (for PostgreSQL) and
 <a href="https://learn.microsoft.com/en-us/sql/relational-databases/performance/database-engine-tuning-advisor?view=sql-server-ver17">Database Engine Tuning Advisor</a>
-(for SQL Server) that try to solve these problems, but nothing equivalent exists for DuckDB.
-Vizier aims to fill that gap.</p>
+(for SQL Server) that try to solve these kinds of problems, but nothing equivalent exists for DuckDB.
+Vizier is a step towards filling that gap.</p>
 <h2 id="how-it-works">How It Works?<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
 <p>You feed Vizier your workload (a collection of queries), and it tells you what to change in your database to make it run faster.</p>
 <p>Install Vizier from the hosted DuckDB extension repository, then use the workflow below.</p>
@@ -732,6 +754,22 @@ Vizier aims to fill that gap.</p>
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_apply</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">vizier_benchmark</span><span class="p">(</span><span class="s1">&#39;select * from events where account_id = 42&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">);</span>
 </code></pre></div>
+<h2 id="when-to-use-vizier">When to Use Vizier?<a class="headerlink" href="#when-to-use-vizier" title="Permanent link">&para;</a></h2>
+<p>Vizier is most useful for:</p>
+<ul>
+<li>Analyzing your query patterns and recommends the sort order and partitioning strategy for Parquet exports. Getting the
+  sort order wrong means 10-100x worse row-group pruning.</li>
+<li>Optimizing persistent DuckDB tables. If you have tables that get scanned repeatedly with the same filter patterns, Vizier identifies which columns
+  to sort by for scan pruning.</li>
+<li>Understanding workload patterns. <code>vizier.workload_summary</code>, <code>vizier.inspect_table()</code>, and <code>vizier.overview()</code> give you a quick picture of which
+  tables and columns are under the most pressure. This can be useful when inheriting a database you did not build.</li>
+</ul>
+<p>Vizier is less useful for:</p>
+<ul>
+<li>Ad-hoc notebook analysis (no repeating patterns)</li>
+<li>Tiny datasets (DuckDB is already fast).</li>
+<li>Read-only Parquet scans like reading Parquet files on an S3 bucket.</li>
+</ul>
 <h2 id="what-vizier-is-not">What Vizier Is Not<a class="headerlink" href="#what-vizier-is-not" title="Permanent link">&para;</a></h2>
 <p>Vizier is not an auto-tuner.
 It does not rewrite your tables for you.
