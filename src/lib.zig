@@ -1,13 +1,14 @@
 const std = @import("std");
 const duckdb = @import("duckdb");
 
-// Vizier sub-modules
+// Vizier's components
 pub const schema = @import("vizier/schema.zig");
 pub const capture = @import("vizier/capture.zig");
 pub const extract = @import("vizier/extract.zig");
 pub const inspect = @import("vizier/inspect.zig");
 pub const advisor = @import("vizier/advisor.zig");
 pub const sql_runner = @import("vizier/sql_runner.zig");
+pub const explain = @import("vizier/explain.zig");
 pub const dashboard = @import("vizier/dashboard.zig");
 
 // ============================================================================
@@ -50,6 +51,13 @@ pub export fn zig_normalize_sql(
 
 /// Extract predicates/tables from a SQL string and store in metadata tables.
 /// Called from flush_pending() in extension.c with the open connection.
+///
+/// Uses two extraction strategies:
+/// 1. Tokenizer (always runs, works even if tables don't exist in the database)
+/// 2. EXPLAIN-based (runs if tables exist, provides more accurate predicates and row estimates)
+///
+/// If EXPLAIN succeeds and produces predicates, its results replace the tokenizer output.
+/// The tokenizer result is kept as a fallback when EXPLAIN fails.
 pub export fn zig_extract_and_store(
     conn: duckdb.duckdb_connection,
     sig_ptr: [*:0]const u8,
@@ -57,7 +65,21 @@ pub export fn zig_extract_and_store(
 ) callconv(.c) bool {
     const sql_slice = std.mem.span(sql_ptr);
     const sig = std.mem.span(sig_ptr);
-    const result = extract.extractFromSql(sql_slice);
+
+    // Strategy 1: tokenizer-based extraction (always works, no DB access needed)
+    const tokenizer_result = extract.extractFromSql(sql_slice);
+
+    // Strategy 2: EXPLAIN-based extraction (needs tables to exist in the database)
+    var explain_scratch: [32768]u8 = undefined;
+    const explain_result = explain.runExplain(conn, sql_slice, &explain_scratch);
+
+    // Use EXPLAIN results if available and non-empty, otherwise fall back to tokenizer
+    const result = if (explain_result.ok and explain_result.predicate_count > 0)
+        explain_result.toExtractionResult()
+    else
+        tokenizer_result;
+
+    const estimated_rows = explain_result.estimated_rows;
 
     // Delete existing predicates for this signature
     var del_buf: [256]u8 = undefined;
@@ -76,16 +98,17 @@ pub export fn zig_extract_and_store(
         sql_runner.runOnConn(conn, @ptrCast(ins_sql.ptr)) catch {};
     }
 
-    // Build JSON and update workload_queries
+    // Build JSON and update workload_queries (including estimated_rows from EXPLAIN)
     var tables_buf: [2048]u8 = undefined;
     var cols_buf: [2048]u8 = undefined;
     const tables_json = extract.buildTablesJson(&result, &tables_buf);
     const columns_json = extract.buildColumnsJson(&result, &cols_buf);
 
     var upd_buf: [4096]u8 = undefined;
-    const upd_sql = std.fmt.bufPrint(&upd_buf, "update vizier.workload_queries set tables_json = '{s}', columns_json = '{s}' where query_signature = '{s}'\x00", .{
+    const upd_sql = std.fmt.bufPrint(&upd_buf, "update vizier.workload_queries set tables_json = '{s}', columns_json = '{s}', estimated_rows = {d} where query_signature = '{s}'\x00", .{
         tables_json,
         columns_json,
+        estimated_rows,
         sig,
     }) catch return false;
     sql_runner.runOnConn(conn, @ptrCast(upd_sql.ptr)) catch {};

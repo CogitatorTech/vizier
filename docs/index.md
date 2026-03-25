@@ -11,15 +11,14 @@ and summary tables to improve query performance.
 
 When you have a DuckDB database, you are typically on your own to figure out things like:
 
-- Which columns need indexes?
 - Should I rewrite my table sorted differently?
 - What sort order should my Parquet exports use?
 - Are any of my indexes redundant?
 - Which queries are my bottleneck?
 
-Tools like [pg_qualstats](https://github.com/powa-team/pg_qualstats) (for PostgreSQL) and
+There are tools like [pg_qualstats](https://github.com/powa-team/pg_qualstats) (for PostgreSQL) and
 [Database Engine Tuning Advisor](https://learn.microsoft.com/en-us/sql/relational-databases/performance/database-engine-tuning-advisor?view=sql-server-ver17)
-(for SQL Server) solve these problems, but nothing equivalent exists for DuckDB.
+(for SQL Server) that try to solve these problems, but nothing equivalent exists for DuckDB.
 Vizier aims to fill that gap.
 
 ## How It Works?
@@ -72,3 +71,4 @@ So you make the decision to apply at the end.
 - [Getting Started](getting-started.md)
 - [Examples](examples.md)
 - [API Reference](api-reference.md)
+- [Current Limitations](limitations.md)

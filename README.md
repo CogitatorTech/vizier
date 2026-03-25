@@ -4,6 +4,7 @@
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/CogitatorTech/vizier/tests.yml?label=tests&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/actions/workflows/tests.yml)
 [![Benchmarks](https://img.shields.io/github/actions/workflow/status/CogitatorTech/vizier/benchmarks.yml?label=benchmarks&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/actions/workflows/benchmarks.yml)
+[![Docs](https://img.shields.io/badge/docs-read-007ec6?label=docs&style=flat&labelColor=282c34&logo=readthedocs)](https://cogitatortech.github.io/vizier/)
 [![License](https://img.shields.io/badge/license-MIT-007ec6?label=license&style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/CogitatorTech/vizier/blob/main/LICENSE)
 [![Zig Version](https://img.shields.io/badge/Zig-0.15.2-orange?logo=zig&labelColor=282c34)](https://ziglang.org/download/)
 [![Release](https://img.shields.io/github/release/CogitatorTech/vizier.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/releases/latest)
@@ -20,15 +21,14 @@ and summary tables to improve query performance.
 
 When you have a DuckDB database, you are typically on your own to figure out things like:
 
-- Which columns need indexes?
 - Should I rewrite my table sorted differently?
 - What sort order should my Parquet exports use?
 - Are any of my indexes redundant?
 - Which queries are my bottleneck?
 
-Tools like [pg_qualstats](https://github.com/powa-team/pg_qualstats) (for PostgreSQL) and
+There are tools like [pg_qualstats](https://github.com/powa-team/pg_qualstats) (for PostgreSQL) and
 [Database Engine Tuning Advisor](https://learn.microsoft.com/en-us/sql/relational-databases/performance/database-engine-tuning-advisor?view=sql-server-ver17)
-(for SQL Server) solve these problems, but nothing equivalent exists for DuckDB.
+(for SQL Server) that try to solve these problems, but nothing equivalent exists for DuckDB.
 Vizier aims to fill that gap.
 
 ### Features
@@ -47,7 +47,8 @@ Vizier aims to fill that gap.
 See [ROADMAP.md](ROADMAP.md) for the list of implemented and planned features.
 
 > [!IMPORTANT]
-> This project is still in early development, so compatibility is not perfect.
+> This project is still in early development and has certain limitations.
+> Please see the [limitations](https://cogitatortech.github.io/vizier/limitations/) section on project documentation for details.
 > Bugs and breaking changes are also expected.
 > Please use the [issues page](https://github.com/CogitatorTech/vizier/issues) to report bugs or request features.
 

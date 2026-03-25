@@ -856,3 +856,50 @@ test "schema tables created on load" {
     try expectContains(out, "workload_queries");
     try expectContains(out, "workload_summary");
 }
+
+test "explain-based extraction populates predicates when tables exist" {
+    const out = try runSql(testing.allocator,
+        \\create table test_explain_events (account_id int, ts date, data varchar);
+        \\insert into test_explain_events values (42, date '2026-03-01', 'x'), (1, date '2025-01-01', 'y');
+        \\select * from vizier_capture('select * from test_explain_events where account_id = 42 and ts >= date ''2026-01-01''');
+        \\select * from vizier_flush();
+        \\select column_name, predicate_kind from vizier.workload_predicates order by column_name;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "account_id");
+    try expectContains(out, "ts");
+}
+
+test "explain-based extraction stores estimated_rows" {
+    const out = try runSql(testing.allocator,
+        \\create table test_explain_rows (id int, val varchar);
+        \\insert into test_explain_rows select i, 'v' from range(1000) t(i);
+        \\select * from vizier_capture('select * from test_explain_rows where id = 42');
+        \\select * from vizier_flush();
+        \\select estimated_rows from vizier.workload_queries;
+    );
+    defer testing.allocator.free(out);
+    // estimated_rows should be > 0 since the table has data
+    const trimmed = std.mem.trim(u8, out, " \n\r");
+    const rows_str = blk: {
+        var lines = std.mem.splitScalar(u8, trimmed, '\n');
+        var last: []const u8 = "";
+        while (lines.next()) |l| last = l;
+        break :blk last;
+    };
+    const rows = std.fmt.parseInt(u64, std.mem.trim(u8, rows_str, " \r"), 10) catch 0;
+    // EXPLAIN should produce a non-zero estimate for a table with 1000 rows
+    try testing.expect(rows > 0);
+}
+
+test "tokenizer fallback when tables do not exist" {
+    const out = try runSql(testing.allocator,
+        \\select * from vizier_capture('select * from nonexistent_table where col = 1');
+        \\select * from vizier_flush();
+        \\select column_name, predicate_kind from vizier.workload_predicates;
+    );
+    defer testing.allocator.free(out);
+    // Tokenizer should still extract predicates even when table doesn't exist
+    try expectContains(out, "col");
+    try expectContains(out, "equality");
+}

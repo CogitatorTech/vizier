@@ -360,6 +360,7 @@ Captured query patterns with execution statistics.
 | `p95_time_ms`     | double  | 95th percentile execution time              |
 | `tables_json`     | varchar | Referenced tables (JSON)                    |
 | `columns_json`    | varchar | Referenced columns (JSON)                   |
+| `estimated_rows`  | bigint  | Estimated rows from `EXPLAIN` (0 if unavailable) |
 
 ### `vizier.workload_predicates`
 
