@@ -47,7 +47,9 @@ Vizier aims to fill that gap.
 See [ROADMAP.md](ROADMAP.md) for the list of implemented and planned features.
 
 > [!IMPORTANT]
-> This project is still in early development, so bugs and breaking changes are expected.
+> This project is still in early development and has certain limitations.
+> Please see the [limitations](https://cogitatortech.github.io/vizier/limitations/) section on project documentation for details.
+> Bugs and breaking changes are also expected.
 > Please use the [issues page](https://github.com/CogitatorTech/vizier/issues) to report bugs or request features.
 
 ---
