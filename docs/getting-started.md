@@ -25,7 +25,7 @@ install vizier from 'https://cogitatortech.github.io/vizier/extensions';
 load vizier;
 ```
 
-The hosted repository currently mirrors binaries for DuckDB `v1.2.0` through `v1.5.0`.
+The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.0`.
 
 > Vizier is currently distributed as an unsigned extension.
 > Start DuckDB with `-unsigned`, or enable unsigned extensions in your client before installing and loading Vizier.
