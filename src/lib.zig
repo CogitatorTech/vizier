@@ -105,8 +105,10 @@ pub export fn zig_extract_and_store(
     const del_sql = std.fmt.bufPrint(&del_buf, "delete from vizier.workload_predicates where query_signature = '{s}'\x00", .{sig}) catch return false;
     sql_runner.runOnConn(conn, @ptrCast(del_sql.ptr)) catch {};
 
-    // Insert each predicate (escape table/column names to handle single quotes)
+    // Insert each predicate (skip empty names, escape for SQL safety)
     for (result.predicateSlice()) |pred| {
+        if (pred.table_name.len == 0 or pred.column_name.len == 0) continue;
+
         var esc_table_buf: [256]u8 = undefined;
         var esc_col_buf: [256]u8 = undefined;
         const esc_table = escapeSql(pred.table_name, &esc_table_buf);

@@ -76,6 +76,7 @@ pub const index_advisor_sql: [*:0]const u8 =
     \\      ) as estimated_rows
     \\    from vizier.workload_predicates p1
     \\    where p1.predicate_kind in ('equality', 'in_list')
+    \\      and p1.table_name != ''
     \\  ) sub
     \\  group by sub.table_name, sub.column_name
     \\) p
@@ -127,7 +128,7 @@ pub const sort_advisor_sql: [*:0]const u8 =
     \\from (
     \\  select table_name, column_name, count(*) as freq
     \\  from vizier.workload_predicates
-    \\  where predicate_kind in ('equality', 'range')
+    \\  where predicate_kind in ('equality', 'range') and table_name != ''
     \\  group by table_name, column_name
     \\  having count(*) >= (select value::integer from vizier.settings where key = 'sort_min_predicates')
     \\) p
@@ -199,7 +200,7 @@ pub const parquet_sort_advisor_sql: [*:0]const u8 =
     \\from (
     \\  select table_name, column_name, count(*) as freq
     \\  from vizier.workload_predicates
-    \\  where predicate_kind in ('equality', 'range')
+    \\  where predicate_kind in ('equality', 'range') and table_name != ''
     \\  group by table_name, column_name
     \\) p
     \\where not exists (
@@ -232,7 +233,7 @@ pub const parquet_partition_advisor_sql: [*:0]const u8 =
     \\from (
     \\  select table_name, column_name, count(*) as freq
     \\  from vizier.workload_predicates
-    \\  where predicate_kind = 'equality'
+    \\  where predicate_kind = 'equality' and table_name != ''
     \\  group by table_name, column_name
     \\  having count(*) >= 2
     \\) p
@@ -277,14 +278,14 @@ pub const parquet_row_group_advisor_sql: [*:0]const u8 =
     \\  from (
     \\    select table_name, count(*) as range_preds, count(distinct column_name) as range_cols
     \\    from vizier.workload_predicates
-    \\    where predicate_kind = 'range'
+    \\    where predicate_kind = 'range' and table_name != ''
     \\    group by table_name
     \\    having count(*) >= 2
     \\  ) agg
     \\  join (
     \\    select table_name, column_name, count(*) as freq
     \\    from vizier.workload_predicates
-    \\    where predicate_kind = 'range'
+    \\    where predicate_kind = 'range' and table_name != ''
     \\    group by table_name, column_name
     \\  ) top on agg.table_name = top.table_name
     \\  qualify row_number() over (partition by agg.table_name order by top.freq desc) = 1
@@ -320,7 +321,7 @@ pub const summary_table_advisor_sql: [*:0]const u8 =
     \\from (
     \\  select table_name, column_name, count(*) as freq
     \\  from vizier.workload_predicates
-    \\  where predicate_kind = 'group_by'
+    \\  where predicate_kind = 'group_by' and table_name != ''
     \\  group by table_name, column_name
     \\  having count(*) >= 2
     \\) p
@@ -357,6 +358,7 @@ pub const join_path_advisor_sql: [*:0]const u8 =
     \\  select p1.table_name, p1.column_name, count(*) as freq
     \\  from vizier.workload_predicates p1
     \\  where p1.predicate_kind = 'equality'
+    \\    and p1.table_name != ''
     \\    and (select w.tables_json from vizier.workload_queries w
     \\         where w.query_signature = p1.query_signature) like '%,%'
     \\  group by p1.table_name, p1.column_name
@@ -390,6 +392,7 @@ pub const no_action_advisor_sql: [*:0]const u8 =
     \\from (
     \\  select distinct table_name
     \\  from vizier.workload_predicates
+    \\  where table_name != ''
     \\) t
     \\where not exists (
     \\  select 1 from vizier.recommendation_store r
