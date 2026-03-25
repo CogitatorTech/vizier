@@ -225,8 +225,13 @@ fn parseFilterLine(result: *ExplainResult, line: []const u8, table: []const u8) 
     if (std.mem.eql(u8, line, "AND") or std.mem.eql(u8, line, "OR")) return;
 
     // Find the operator to split column name from value
-    const col_name = extractColumnFromFilter(line);
+    var col_name = extractColumnFromFilter(line);
     if (col_name.len == 0) return;
+
+    // Strip DuckDB's "optional: " prefix from column names
+    if (std.mem.startsWith(u8, col_name, "optional: ")) {
+        col_name = col_name["optional: ".len..];
+    }
 
     const kind = classifyFilterOp(line);
     addPredicate(result, table, col_name, kind);
@@ -295,6 +300,8 @@ fn parseEstimatedRows(line: []const u8) u64 {
 // ============================================================================
 
 fn addTable(result: *ExplainResult, name: []const u8) void {
+    if (!isValidIdentifier(name)) return;
+
     // Deduplicate
     for (result.tables[0..result.table_count]) |t| {
         if (std.mem.eql(u8, t.name, name)) return;
@@ -304,7 +311,24 @@ fn addTable(result: *ExplainResult, name: []const u8) void {
     result.table_count += 1;
 }
 
+/// Check if a string looks like a valid SQL identifier (alphanumeric, underscores).
+/// Rejects strings containing spaces, pipes, colons, parentheses, hash signs,
+/// or other characters that indicate EXPLAIN plan formatting leaked through.
+fn isValidIdentifier(name: []const u8) bool {
+    if (name.len == 0 or name.len > 128) return false;
+    for (name) |c| {
+        if ((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or
+            (c >= '0' and c <= '9') or c == '_') continue;
+        return false;
+    }
+    return true;
+}
+
 fn addPredicate(result: *ExplainResult, table: []const u8, column: []const u8, kind: extract.PredicateKind) void {
+    // Reject garbage column/table names from EXPLAIN misparses
+    if (!isValidIdentifier(column)) return;
+    if (!isValidIdentifier(table)) return;
+
     // Deduplicate
     for (result.predicates[0..result.predicate_count]) |p| {
         if (std.mem.eql(u8, p.table_name, table) and
@@ -378,8 +402,10 @@ test "parse join with conditions" {
 
     const result = parsePlan(plan);
     try std.testing.expectEqual(@as(usize, 1), result.table_count);
-    try std.testing.expect(result.predicate_count >= 2);
-    // Should have join condition predicates + filter predicate
+    // Join conditions appear before the Table: line, so they are dropped
+    // (no valid table context yet). Only the filter after Table: is kept.
+    try std.testing.expect(result.predicate_count >= 1);
+    try std.testing.expectEqualStrings("account_id", result.predicates[0].column_name);
 }
 
 test "parse estimated rows" {

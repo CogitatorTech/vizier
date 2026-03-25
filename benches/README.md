@@ -18,9 +18,10 @@ Or directly:
 ### Running a Single Benchmark
 
 ```bash
-./benches/run.sh tpch           # Runs only tpch_workload.sql
-./benches/run.sh capture        # Runs only capture_throughput.sql
-./benches/run.sh advisor        # Runs only advisor_throughput.sql
+./benches/run.sh tpch_workload   # Runs only tpch_workload.sql
+./benches/run.sh tpch_correct   # Runs only tpch_correctness.sql
+./benches/run.sh capture         # Runs only capture_throughput.sql
+./benches/run.sh advisor         # Runs only advisor_throughput.sql
 ```
 
 ### Benchmark Descriptions
@@ -28,6 +29,7 @@ Or directly:
 | File                     | What it measures                                                                                         |
 |--------------------------|----------------------------------------------------------------------------------------------------------|
 | `tpch_workload.sql`      | End-to-end: TPC-H data (500K+ rows), 12 analytical queries, advisors, apply, before and after benchmarks |
+| `tpch_correctness.sql`   | Correctness: real TPC-H via `dbgen`, all 22 queries, validates recommendations against expected results  |
 | `advisor_throughput.sql` | Advisor speed: analyze time at 10 and 30 query workload sizes across 3 tables                            |
 | `capture_throughput.sql` | Capture speed: 50 individual captures, 500 bulk captures, flush throughput                               |
 

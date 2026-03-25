@@ -264,10 +264,21 @@ static void vizier_configure_func(duckdb_function_info info,
       uint32_t vlen = duckdb_string_t_length(vals[i]);
       const char *vptr = duckdb_string_t_data(&vals[i]);
 
+      // Copy to null-terminated buffers and escape for safe SQL embedding
+      char kbuf[256], vbuf[512];
+      size_t kc = klen < sizeof(kbuf) - 1 ? klen : sizeof(kbuf) - 1;
+      size_t vc = vlen < sizeof(vbuf) - 1 ? vlen : sizeof(vbuf) - 1;
+      memcpy(kbuf, kptr, kc); kbuf[kc] = '\0';
+      memcpy(vbuf, vptr, vc); vbuf[vc] = '\0';
+      char *esc_key = escape_sql_str(kbuf);
+      char *esc_val = escape_sql_str(vbuf);
+
       char buf[1024];
       snprintf(buf, sizeof(buf),
-               "update vizier.settings set value = '%.*s' where key = '%.*s'",
-               (int)vlen, vptr, (int)klen, kptr);
+               "update vizier.settings set value = '%s' where key = '%s'",
+               esc_val, esc_key);
+      free(esc_key);
+      free(esc_val);
 
       duckdb_result res;
       memset(&res, 0, sizeof(res));
