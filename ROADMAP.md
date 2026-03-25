@@ -103,7 +103,7 @@ This document outlines the features implemented in Vizier and the future goals f
 - [x] SQL-based benchmarks against real-world datasets (`benches/` and `make bench`)
 - [x] TPC-H correctness validation (`benches/tpch_correctness.sql`)
 - [x] Cross-platform build support (Linux, macOS, Windows, and FreeBSD)
-- [x] CI pipeline with 9-platform cross-compile
+- [x] CI pipeline with 8-platform cross-compile
 - [x] Schema migration support for upgrades (`ALTER TABLE ADD COLUMN IF NOT EXISTS`)
 - [x] Cross-version state load/save compatibility (`INSERT BY NAME`)
 
@@ -115,7 +115,7 @@ to accumulate over days and weeks.
 - [x] `vizier_init(path)` persistent state file initialization
 - [x] Autoload state on extension init if `state_path` setting is configured
 - [x] Auto-save metadata tables on `vizier_flush()` when `state_path` is configured
-- [x] `vizier_export(path)` and `vizier_import(path)` for state transfer across environments
+- [x] `vizier_save(path)` and `vizier_load(path)` for state transfer across environments
 - [ ] Attach-based persistence using `ATTACH ':vizier_state:' AS vizier` to a file-backed database
 
 ### Automatic Query Capture

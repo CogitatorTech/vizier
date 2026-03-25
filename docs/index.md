@@ -1,6 +1,6 @@
 # Vizier
 
-**A database advisor and finetuner for DuckDB.**
+**A physical design advisor for DuckDB.**
 
 ---
 
@@ -18,8 +18,8 @@ When you have a DuckDB database, you are typically on your own to figure out thi
 
 There are tools like [pg_qualstats](https://github.com/powa-team/pg_qualstats) (for PostgreSQL) and
 [Database Engine Tuning Advisor](https://learn.microsoft.com/en-us/sql/relational-databases/performance/database-engine-tuning-advisor?view=sql-server-ver17)
-(for SQL Server) that try to solve these problems, but nothing equivalent exists for DuckDB.
-Vizier aims to fill that gap.
+(for SQL Server) that try to solve these kinds of problems, but nothing equivalent exists for DuckDB.
+Vizier is a step towards filling that gap.
 
 ## How It Works?
 
@@ -45,6 +45,23 @@ select * from vizier.recommendations;
 select * from vizier_apply(1);
 select * from vizier_benchmark('select * from events where account_id = 42', 10);
 ```
+
+## When to Use Vizier?
+
+Vizier is most useful for:
+
+- Analyzing your query patterns and recommends the sort order and partitioning strategy for Parquet exports. Getting the
+  sort order wrong means 10-100x worse row-group pruning.
+- Optimizing persistent DuckDB tables. If you have tables that get scanned repeatedly with the same filter patterns, Vizier identifies which columns
+  to sort by for scan pruning.
+- Understanding workload patterns. `vizier.workload_summary`, `vizier.inspect_table()`, and `vizier.overview()` give you a quick picture of which
+  tables and columns are under the most pressure. This can be useful when inheriting a database you did not build.
+
+Vizier is less useful for:
+
+- Ad-hoc notebook analysis (no repeating patterns).
+- Tiny datasets (DuckDB is already fast).
+- Read-only Parquet scans like reading Parquet files on an S3 bucket.
 
 ## What Vizier Is Not
 
