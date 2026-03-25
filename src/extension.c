@@ -268,8 +268,10 @@ static void vizier_configure_func(duckdb_function_info info,
       char kbuf[256], vbuf[512];
       size_t kc = klen < sizeof(kbuf) - 1 ? klen : sizeof(kbuf) - 1;
       size_t vc = vlen < sizeof(vbuf) - 1 ? vlen : sizeof(vbuf) - 1;
-      memcpy(kbuf, kptr, kc); kbuf[kc] = '\0';
-      memcpy(vbuf, vptr, vc); vbuf[vc] = '\0';
+      memcpy(kbuf, kptr, kc);
+      kbuf[kc] = '\0';
+      memcpy(vbuf, vptr, vc);
+      vbuf[vc] = '\0';
       char *esc_key = escape_sql_str(kbuf);
       char *esc_val = escape_sql_str(vbuf);
 
