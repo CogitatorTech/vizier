@@ -120,8 +120,8 @@ jobs:
           asset_content_type: application/zip
 
   build-linux-arm64:
-    name: Build Linux ARM64
-    runs-on: ubuntu-24.04-arm64
+    name: Build Linux ARM64 (cross-compile)
+    runs-on: ubuntu-latest
     needs: create-release
     permissions:
       contents: write
@@ -147,20 +147,16 @@ jobs:
             EXTENSION_NAME=${{ env.EXTENSION_NAME }} \
             EXTENSION_API_VERSION=${{ env.EXTENSION_API_VERSION }}
 
-      - name: Download DuckDB CLI
+      - name: Verify build artifact
         run: |
-          wget -q https://github.com/duckdb/duckdb/releases/download/${{ env.DUCKDB_VERSION }}/duckdb_cli-linux-arm64.zip
-          unzip -q duckdb_cli-linux-arm64.zip
-          chmod +x duckdb
-
-      - name: Smoke test
-        run: |
-          ./duckdb -unsigned -c "
-            LOAD 'zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension';
-            SELECT extension_name, loaded, extension_version FROM duckdb_extensions() WHERE extension_name = '${{ env.EXTENSION_NAME }}';
-          " > test_output.txt
-          cat test_output.txt
-          grep -q "${{ env.EXTENSION_NAME }}" test_output.txt && grep -q "true" test_output.txt && echo "Smoke test passed: Extension loaded successfully" || (echo "Smoke test failed" && exit 1)
+          if [ -f "zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension" ]; then
+            echo "Extension built successfully"
+            file zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
+            ls -lh zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          else
+            echo "Extension file not found"
+            exit 1
+          fi
 
       - name: Upload repository artifact
         uses: actions/upload-artifact@v4
@@ -244,8 +240,8 @@ jobs:
           asset_content_type: application/zip
 
   build-linux-arm64-musl:
-    name: Build Linux ARM64 (musl)
-    runs-on: ubuntu-24.04-arm64
+    name: Build Linux ARM64 musl (cross-compile)
+    runs-on: ubuntu-latest
     needs: create-release
     permissions:
       contents: write
