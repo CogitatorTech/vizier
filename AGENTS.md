@@ -75,10 +75,10 @@ snapshot isolation issues.
 
 Multiple capture methods feed into the same `g_pending` buffer:
 
-- `vizier_capture(sql)` — single query capture.
-- `vizier_capture_bulk(table, column)` — reads SQL from a table column via `g_flush_conn`.
-- `vizier_start_capture()` / `vizier_session_log(sql)` / `vizier_stop_capture()` — session-based capture using `vizier.session_log` table.
-- `vizier_import_profile(path)` — reads from DuckDB JSON profiling output via `read_json_auto`.
+- `vizier_capture(sql)`: single query capture.
+- `vizier_capture_bulk(table, column)`: reads SQL from a table column via `g_flush_conn`.
+- `vizier_start_capture()` / `vizier_session_log(sql)` / `vizier_stop_capture()`: session-based capture using `vizier.session_log` table.
+- `vizier_import_profile(path)`: reads from DuckDB JSON profiling output via `read_json_auto`.
 
 ## Zig and C Conventions
 
@@ -107,7 +107,7 @@ Run `make test` for any change. This runs all three test suites:
 |-------------------|-------------------------|-----------------------------------------------------------------|
 | Unit + regression | `make test-unit`        | Inline `test` blocks in `src/vizier/*.zig`                      |
 | Property-based    | `make test-property`    | `tests/property_tests.zig` with Minish                          |
-| Integration       | `make test-integration` | `tests/integration_tests.zig` — spawns DuckDB, validates output |
+| Integration       | `make test-integration` | `tests/integration_tests.zig` (spawns DuckDB, validates output) |
 | All               | `make test`             | Runs all of the above                                           |
 
 For interactive exploration: `make duckdb`.
@@ -123,7 +123,7 @@ For interactive exploration: `make duckdb`.
 Good first tasks:
 
 - Add a new metadata column to a vizier table (update DDL in `schema.zig`).
-- Add a new advisor in `advisor.zig` (define SQL, add to `all_advisor_sqls` array — it auto-registers).
+- Add a new advisor in `advisor.zig` (define SQL, add to `all_advisor_sqls` array; it auto-registers).
 - Add a new scalar function (follow the `vizier_version` pattern in `extension.c`).
 - Add a new table macro (add SQL constant in `schema.zig`, register in `ddl_statements` array).
 
