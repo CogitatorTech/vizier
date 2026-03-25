@@ -54,7 +54,7 @@ They do not report the tradeoff or warn that other queries may regress.
 
 Use `vizier_replay()` after applying a sort recommendation to check for regressions across the full workload.
 
-## Large API Surface for an Early Release
+## Large API Surface
 
 Vizier exposes 22 functions, 8 macros, 5 views, 8 metadata tables, and 14 settings.
 Some of these may change or be removed in future versions.
