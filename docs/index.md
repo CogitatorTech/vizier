@@ -28,23 +28,48 @@ You feed Vizier your workload (a collection of queries), and it tells you what t
 Install Vizier from the hosted DuckDB extension repository, then use the workflow below.
 
 ```sql
-install vizier from 'https://cogitatortech.github.io/vizier/extensions';
-load vizier;
+install
+vizier from 'https://cogitatortech.github.io/vizier/extensions';
+load
+vizier;
 
 -- Capture your real queries
-select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
-select * from vizier_flush();
+select *
+from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
+select *
+from vizier_flush();
 
 -- Get recommendations
-select * from vizier_analyze();
-select * from vizier.recommendations;
+select *
+from vizier_analyze();
+select *
+from vizier.recommendations;
 -- Create index idx_events_account_id on events(account_id)
 -- Rewrite events sorted by (account_id, ts) for scan pruning
 
 -- Apply and measure the impact
-select * from vizier_apply(1);
-select * from vizier_benchmark('select * from events where account_id = 42', 10);
+select *
+from vizier_apply(1);
+select *
+from vizier_benchmark('select * from events where account_id = 42', 10);
 ```
+
+## When to Use Vizier?
+
+Vizier is most useful for:
+
+- Analyzing your query patterns and recommends the sort order and partitioning strategy for Parquet exports. Getting the
+  sort order wrong means 10-100x worse row-group pruning.
+- Optimizing persistent DuckDB tables. If you have tables that get scanned repeatedly with the same filter patterns, Vizier identifies which columns
+  to sort by for scan pruning.
+- Understanding workload patterns. `vizier.workload_summary`, `vizier.inspect_table()`, and `vizier.overview()` give you a quick picture of which
+  tables and columns are under the most pressure. This can be useful when inheriting a database you did not build.
+
+Note that Vizier is less useful for:
+
+- Ad-hoc notebook analysis (no repeating patterns)
+- Tiny datasets (DuckDB is already fast).
+- Read-only Parquet scans like reading Parquet files on an S3 bucket.
 
 ## What Vizier Is Not
 
