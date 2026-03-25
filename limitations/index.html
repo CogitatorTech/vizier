@@ -543,10 +543,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#sql-parsing-is-heuristic" class="md-nav__link">
+  <a href="#sql-parsing-uses-two-strategies" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SQL Parsing Is Heuristic
+        SQL Parsing Uses Two Strategies
       
     </span>
   </a>
@@ -554,10 +554,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#scoring-is-frequency-based-not-cost-based" class="md-nav__link">
+  <a href="#scoring-is-partially-cost-aware" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Scoring Is Frequency-Based, Not Cost-Based
+        Scoring Is Partially Cost-Aware
       
     </span>
   </a>
@@ -654,10 +654,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#sql-parsing-is-heuristic" class="md-nav__link">
+  <a href="#sql-parsing-uses-two-strategies" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SQL Parsing Is Heuristic
+        SQL Parsing Uses Two Strategies
       
     </span>
   </a>
@@ -665,10 +665,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#scoring-is-frequency-based-not-cost-based" class="md-nav__link">
+  <a href="#scoring-is-partially-cost-aware" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Scoring Is Frequency-Based, Not Cost-Based
+        Scoring Is Partially Cost-Aware
       
     </span>
   </a>
@@ -747,9 +747,20 @@ its recommendations accordingly.</p>
 There is no automatic capture that transparently records all queries as they run.
 This means the quality of recommendations depends entirely on whether you feed Vizier a representative workload.</p>
 <p>Automatic capture (via DuckDB profiling output or a query log hook) is planned but not yet implemented.</p>
-<h2 id="sql-parsing-is-heuristic">SQL Parsing Is Heuristic<a class="headerlink" href="#sql-parsing-is-heuristic" title="Permanent link">&para;</a></h2>
-<p>The predicate extractor is a hand-rolled tokenizer, not a full SQL parser.
-It works for common <code>SELECT</code> queries with <code>WHERE</code>, <code>JOIN</code>, and <code>GROUP BY</code> clauses, but it will miss or misparse things like:</p>
+<h2 id="sql-parsing-uses-two-strategies">SQL Parsing Uses Two Strategies<a class="headerlink" href="#sql-parsing-uses-two-strategies" title="Permanent link">&para;</a></h2>
+<p>Vizier uses two extraction strategies during a flush:</p>
+<ol>
+<li>
+<p><strong>EXPLAIN-based extraction</strong> (preferred): runs <code>EXPLAIN</code> on the captured query using DuckDB's own parser.
+   This produces accurate table references, filter predicates, and estimated row counts directly from the
+   query plan. Note that it only works when the referenced tables exist in the current database.</p>
+</li>
+<li>
+<p><strong>Tokenizer-based extraction</strong> (fallback): a hand-rolled tokenizer that parses SQL text without
+   database access. Used when <code>EXPLAIN</code> fails (e.g., tables do not exist, or the query uses unsupported syntax).</p>
+</li>
+</ol>
+<p>The tokenizer fallback has known limitations. It will miss or misparse:</p>
 <ul>
 <li>Subqueries and CTEs</li>
 <li>Window functions with <code>PARTITION BY</code></li>
@@ -759,14 +770,16 @@ It works for common <code>SELECT</code> queries with <code>WHERE</code>, <code>J
 </ul>
 <p>The tokenizer also has fixed limits: 1024 tokens and 64 predicates per query.
 Queries that exceed these limits are silently truncated.</p>
-<p>There is currently no way to tell whether a query was fully parsed or partially extracted.</p>
-<h2 id="scoring-is-frequency-based-not-cost-based">Scoring Is Frequency-Based, Not Cost-Based<a class="headerlink" href="#scoring-is-frequency-based-not-cost-based" title="Permanent link">&para;</a></h2>
-<p>Recommendations are scored using query frequency, predicate counts, and hand-tuned thresholds 
-(like "divide frequency by 10" or "boost by 1.2x for low selectivity").
-These heuristics are reasonable defaults but are not grounded in actual query execution costs.</p>
-<p>The "estimated_gain" values (like "10-50x faster") are generated from templates, not from measured or predicted performance.
-Treat them as rough indicators, not guarantees.</p>
-<p>Cost-based scoring using <code>EXPLAIN</code> output is planned but not yet implemented.</p>
+<p>For best results, create the tables in your database before capturing and flushing queries so that
+EXPLAIN-based extraction can run.</p>
+<h2 id="scoring-is-partially-cost-aware">Scoring Is Partially Cost-Aware<a class="headerlink" href="#scoring-is-partially-cost-aware" title="Permanent link">&para;</a></h2>
+<p>Recommendations are scored using query frequency, predicate counts, and hand-tuned thresholds.
+When EXPLAIN-based extraction succeeds, the estimated row count from the query plan is factored
+into scoring (queries scanning more rows get a larger boost from index recommendations).</p>
+<p>The "estimated_gain" values (like "10-50x faster") are still generated from templates, not from
+measured performance. Treat them as rough indicators, not guarantees.</p>
+<p>Full cost-based scoring that compares optimizer cost before and after a recommendation is not yet
+implemented.</p>
 <h2 id="art-indexes-have-limited-value-in-duckdb">ART Indexes Have Limited Value in DuckDB<a class="headerlink" href="#art-indexes-have-limited-value-in-duckdb" title="Permanent link">&para;</a></h2>
 <p>DuckDB's ART indexes are primarily useful for point lookups and primary key enforcement.
 The DuckDB optimizer often skips ART indexes for range scans because columnar min/max zone maps already provide pruning.
