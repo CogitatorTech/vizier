@@ -179,13 +179,26 @@ fn trimPlanLine(line: []const u8) []const u8 {
 }
 
 /// Check if a line is a separator (all dashes, possibly with spaces).
+/// Handles both ASCII dashes '-' and UTF-8 box-drawing dashes '─' (U+2500 = 0xe2 0x94 0x80).
 fn isSeparator(line: []const u8) bool {
     if (line.len < 3) return false;
-    for (line) |c| {
-        if (c != '-' and c != ' ' and c != 0xe2) return false;
-        // Allow UTF-8 dash characters too
+    var i: usize = 0;
+    var dash_count: usize = 0;
+    while (i < line.len) {
+        if (line[i] == '-') {
+            dash_count += 1;
+            i += 1;
+        } else if (line[i] == ' ') {
+            i += 1;
+        } else if (i + 2 < line.len and line[i] == 0xe2 and line[i + 1] == 0x94 and line[i + 2] == 0x80) {
+            // UTF-8 box-drawing horizontal: ─ (U+2500)
+            dash_count += 1;
+            i += 3;
+        } else {
+            return false;
+        }
     }
-    return true;
+    return dash_count >= 3;
 }
 
 /// Extract table name from "memory.main.events" or "catalog.schema.table" format.
@@ -212,8 +225,13 @@ fn parseFilterLine(result: *ExplainResult, line: []const u8, table: []const u8) 
     if (std.mem.eql(u8, line, "AND") or std.mem.eql(u8, line, "OR")) return;
 
     // Find the operator to split column name from value
-    const col_name = extractColumnFromFilter(line);
+    var col_name = extractColumnFromFilter(line);
     if (col_name.len == 0) return;
+
+    // Strip DuckDB's "optional: " prefix from column names
+    if (std.mem.startsWith(u8, col_name, "optional: ")) {
+        col_name = col_name["optional: ".len..];
+    }
 
     const kind = classifyFilterOp(line);
     addPredicate(result, table, col_name, kind);
@@ -243,6 +261,8 @@ fn classifyFilterOp(line: []const u8) extract.PredicateKind {
     if (std.mem.indexOf(u8, line, " LIKE ") != null) return .like;
     if (std.mem.indexOf(u8, line, " IN ") != null) return .in_list;
     if (std.mem.indexOf(u8, line, " BETWEEN ") != null) return .range;
+    // Check not-equal operators before range operators to avoid misclassifying <> as range
+    if (std.mem.indexOf(u8, line, "<>") != null or std.mem.indexOf(u8, line, "!=") != null) return .equality;
     if (std.mem.indexOf(u8, line, ">=") != null or
         std.mem.indexOf(u8, line, "<=") != null or
         std.mem.indexOf(u8, line, ">") != null or
@@ -280,6 +300,8 @@ fn parseEstimatedRows(line: []const u8) u64 {
 // ============================================================================
 
 fn addTable(result: *ExplainResult, name: []const u8) void {
+    if (!isValidIdentifier(name)) return;
+
     // Deduplicate
     for (result.tables[0..result.table_count]) |t| {
         if (std.mem.eql(u8, t.name, name)) return;
@@ -289,7 +311,24 @@ fn addTable(result: *ExplainResult, name: []const u8) void {
     result.table_count += 1;
 }
 
+/// Check if a string looks like a valid SQL identifier (alphanumeric, underscores).
+/// Rejects strings containing spaces, pipes, colons, parentheses, hash signs,
+/// or other characters that indicate EXPLAIN plan formatting leaked through.
+fn isValidIdentifier(name: []const u8) bool {
+    if (name.len == 0 or name.len > 128) return false;
+    for (name) |c| {
+        if ((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or
+            (c >= '0' and c <= '9') or c == '_') continue;
+        return false;
+    }
+    return true;
+}
+
 fn addPredicate(result: *ExplainResult, table: []const u8, column: []const u8, kind: extract.PredicateKind) void {
+    // Reject garbage column/table names from EXPLAIN misparses
+    if (!isValidIdentifier(column)) return;
+    if (!isValidIdentifier(table)) return;
+
     // Deduplicate
     for (result.predicates[0..result.predicate_count]) |p| {
         if (std.mem.eql(u8, p.table_name, table) and
@@ -363,8 +402,10 @@ test "parse join with conditions" {
 
     const result = parsePlan(plan);
     try std.testing.expectEqual(@as(usize, 1), result.table_count);
-    try std.testing.expect(result.predicate_count >= 2);
-    // Should have join condition predicates + filter predicate
+    // Join conditions appear before the Table: line, so they are dropped
+    // (no valid table context yet). Only the filter after Table: is kept.
+    try std.testing.expect(result.predicate_count >= 1);
+    try std.testing.expectEqualStrings("account_id", result.predicates[0].column_name);
 }
 
 test "parse estimated rows" {
@@ -384,6 +425,21 @@ test "classifyFilterOp" {
     try std.testing.expectEqual(extract.PredicateKind.range, classifyFilterOp("ts>='2026-01-01'::DATE"));
     try std.testing.expectEqual(extract.PredicateKind.range, classifyFilterOp("amount<100"));
     try std.testing.expectEqual(extract.PredicateKind.like, classifyFilterOp("name LIKE '%foo%'"));
+}
+
+test "isSeparator handles UTF-8 box dashes" {
+    try std.testing.expect(isSeparator("────────────────────"));
+    try std.testing.expect(isSeparator("-------------------"));
+    try std.testing.expect(isSeparator("── ── ── ── ── ──"));
+    try std.testing.expect(!isSeparator("Table:"));
+    try std.testing.expect(!isSeparator("ab"));
+    try std.testing.expect(!isSeparator("Filters:"));
+}
+
+test "classifyFilterOp handles not-equal" {
+    try std.testing.expectEqual(extract.PredicateKind.equality, classifyFilterOp("status<>'active'"));
+    try std.testing.expectEqual(extract.PredicateKind.equality, classifyFilterOp("status!='active'"));
+    try std.testing.expectEqual(extract.PredicateKind.range, classifyFilterOp("amount>100"));
 }
 
 test "extractColumnFromFilter" {

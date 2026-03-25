@@ -137,7 +137,11 @@ Example output:
 
 ### Documentation
 
-Check out the project documentation [here](https://cogitatortech.github.io/vizier/).
+Check out the project documentation [here](https://cogitatortech.github.io/vizier/) for more details, including examples and API reference.
+
+### Benchmarks
+
+See the [benches](benches/README.md) directory on how to run the local benchmarks for Vizier and its API.
 
 ---
 

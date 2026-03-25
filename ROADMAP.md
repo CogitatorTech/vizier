@@ -93,12 +93,19 @@ This document outlines the features implemented in Vizier and the future goals f
 - [x] `vizier.replay_summary` regression detection view
 - [x] `vizier.replay_results` per-query replay breakdown table
 
+### Integrations
+
+- [x] dbt import script (`scripts/import_dbt.py`) for capturing workloads from dbt run results
+
 ### Development and Testing
 
 - [x] Unit, property-based, integration, and standalone SQL tests
 - [x] SQL-based benchmarks against real-world datasets (`benches/` and `make bench`)
+- [x] TPC-H correctness validation (`benches/tpch_correctness.sql`)
 - [x] Cross-platform build support (Linux, macOS, Windows, and FreeBSD)
 - [x] CI pipeline with 9-platform cross-compile
+- [x] Schema migration support for upgrades (`ALTER TABLE ADD COLUMN IF NOT EXISTS`)
+- [x] Cross-version state load/save compatibility (`INSERT BY NAME`)
 
 ### Persistent State
 
@@ -130,12 +137,12 @@ Replace frequency-based scoring with cost-aware scoring that factors in query pe
 
 ### Web Dashboard
 
+- [x] Static HTML report export via `vizier_report(path)`
 - [ ] Embedded HTTP server in the extension (or standalone `vizier-dashboard` binary)
 - [ ] Workload heatmap: tables and columns colored by query frequency and time spent
 - [ ] Recommendation list with score bars, one-click apply, and dry-run preview
 - [ ] Before/after plan diff viewer and timeline of applied changes
 - [ ] Physical design overview: tables, indexes, sizes, and predicate coverage
-- [x] Static HTML report export via `vizier_report(path)`
 
 ### LLM-Powered Explanations
 

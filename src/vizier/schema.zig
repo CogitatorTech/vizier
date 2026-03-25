@@ -453,6 +453,12 @@ const create_change_history_view_sql =
     \\order by a.action_id desc
 ;
 
+// Schema migrations for existing databases.
+// These run after table creation and use "IF NOT EXISTS" to be idempotent.
+const migrate_add_estimated_rows_sql =
+    \\alter table vizier.workload_queries add column if not exists estimated_rows bigint default 0
+;
+
 const ddl_statements = [_][*:0]const u8{
     create_schema_sql,
     create_settings_sql,
@@ -462,6 +468,7 @@ const ddl_statements = [_][*:0]const u8{
     create_action_id_seq_sql,
     create_bench_id_seq_sql,
     create_workload_queries_sql,
+    migrate_add_estimated_rows_sql,
     create_workload_predicates_sql,
     create_recommendation_store_sql,
     create_applied_actions_sql,

@@ -18,7 +18,7 @@ env:
   EXTENSION_API_VERSION: v1.2.0
   ZIG_VERSION: 0.15.2
   DUCKDB_VERSION: v1.5.0
-  SUPPORTED_DUCKDB_VERSIONS: v1.2.0,v1.2.1,v1.2.2,v1.3.0,v1.3.1,v1.3.2,v1.4.0,v1.4.1,v1.4.2,v1.4.3,v1.5.0
+  SUPPORTED_DUCKDB_VERSIONS: v1.2.0,v1.2.1,v1.2.2,v1.3.0,v1.3.1,v1.3.2,v1.4.0,v1.4.1,v1.4.2,v1.4.3,v1.4.4,v1.5.0
 
 jobs:
   call-tests:

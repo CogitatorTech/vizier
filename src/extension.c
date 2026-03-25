@@ -264,10 +264,21 @@ static void vizier_configure_func(duckdb_function_info info,
       uint32_t vlen = duckdb_string_t_length(vals[i]);
       const char *vptr = duckdb_string_t_data(&vals[i]);
 
+      // Copy to null-terminated buffers and escape for safe SQL embedding
+      char kbuf[256], vbuf[512];
+      size_t kc = klen < sizeof(kbuf) - 1 ? klen : sizeof(kbuf) - 1;
+      size_t vc = vlen < sizeof(vbuf) - 1 ? vlen : sizeof(vbuf) - 1;
+      memcpy(kbuf, kptr, kc); kbuf[kc] = '\0';
+      memcpy(vbuf, vptr, vc); vbuf[vc] = '\0';
+      char *esc_key = escape_sql_str(kbuf);
+      char *esc_val = escape_sql_str(vbuf);
+
       char buf[1024];
       snprintf(buf, sizeof(buf),
-               "update vizier.settings set value = '%.*s' where key = '%.*s'",
-               (int)vlen, vptr, (int)klen, kptr);
+               "update vizier.settings set value = '%s' where key = '%s'",
+               esc_val, esc_key);
+      free(esc_key);
+      free(esc_val);
 
       duckdb_result res;
       memset(&res, 0, sizeof(res));
@@ -343,9 +354,10 @@ static void init_state_bind(duckdb_bind_info info) {
             duckdb_query(g_flush_conn, buf, &dr);
             duckdb_destroy_result(&dr);
 
-            snprintf(buf, sizeof(buf),
-                     "insert into vizier.%s select * from _vstate.vizier.%s",
-                     vizier_persist_tables[i], vizier_persist_tables[i]);
+            snprintf(
+                buf, sizeof(buf),
+                "insert into vizier.%s by name select * from _vstate.vizier.%s",
+                vizier_persist_tables[i], vizier_persist_tables[i]);
             memset(&dr, 0, sizeof(dr));
             duckdb_query(g_flush_conn, buf, &dr);
             duckdb_destroy_result(&dr);
@@ -543,9 +555,10 @@ static void load_bind(duckdb_bind_info info) {
           duckdb_destroy_result(&result);
 
           // Insert from attached db
-          snprintf(buf, sizeof(buf),
-                   "insert into vizier.%s select * from _vstate.vizier.%s",
-                   vizier_persist_tables[i], vizier_persist_tables[i]);
+          snprintf(
+              buf, sizeof(buf),
+              "insert into vizier.%s by name select * from _vstate.vizier.%s",
+              vizier_persist_tables[i], vizier_persist_tables[i]);
           memset(&result, 0, sizeof(result));
           if (duckdb_query(g_flush_conn, buf, &result) == DuckDBSuccess)
             loaded++;
@@ -2076,6 +2089,30 @@ static void compare_bind(duckdb_bind_info info) {
   if (!g_flush_conn)
     goto compare_done;
 
+  // Read compare_bench_runs from settings (default to COMPARE_BENCH_RUNS)
+  int compare_runs = COMPARE_BENCH_RUNS;
+  {
+    duckdb_result sr;
+    memset(&sr, 0, sizeof(sr));
+    if (duckdb_query(g_flush_conn,
+                     "select value::integer from vizier.settings "
+                     "where key = 'compare_bench_runs'",
+                     &sr) == DuckDBSuccess) {
+      duckdb_data_chunk sc = duckdb_fetch_chunk(sr);
+      if (sc && duckdb_data_chunk_get_size(sc) > 0) {
+        duckdb_vector sv = duckdb_data_chunk_get_vector(sc, 0);
+        compare_runs = ((int32_t *)duckdb_vector_get_data(sv))[0];
+        if (compare_runs < 1)
+          compare_runs = 1;
+        if (compare_runs > MAX_BENCH_RUNS)
+          compare_runs = MAX_BENCH_RUNS;
+      }
+      if (sc)
+        duckdb_destroy_data_chunk(&sc);
+    }
+    duckdb_destroy_result(&sr);
+  }
+
   // Fetch recommendation SQL and a sample query for that table
   char fetch_buf[512];
   snprintf(fetch_buf, sizeof(fetch_buf),
@@ -2142,7 +2179,7 @@ static void compare_bind(duckdb_bind_info info) {
   // Baseline benchmark
   double baseline_total = 0;
   {
-    for (int i = 0; i < COMPARE_BENCH_RUNS; i++) {
+    for (int i = 0; i < compare_runs; i++) {
       double start = get_time_ms();
       duckdb_result br;
       memset(&br, 0, sizeof(br));
@@ -2151,7 +2188,7 @@ static void compare_bind(duckdb_bind_info info) {
       baseline_total += get_time_ms() - start;
     }
   }
-  bind_data->baseline_ms = baseline_total / COMPARE_BENCH_RUNS;
+  bind_data->baseline_ms = baseline_total / compare_runs;
 
   // Apply the recommendation
   {
@@ -2173,6 +2210,33 @@ static void compare_bind(duckdb_bind_info info) {
     memset(&mr, 0, sizeof(mr));
     duckdb_query(g_flush_conn, mark_buf, &mr);
     duckdb_destroy_result(&mr);
+
+    // Log to applied_actions with inverse SQL for rollback
+    char inverse_sql[4096] = "";
+    if (strncmp(rec_sql, "create index ", 13) == 0) {
+      const char *idx_start = rec_sql + 13;
+      const char *idx_end = strstr(idx_start, " on ");
+      if (idx_end) {
+        snprintf(inverse_sql, sizeof(inverse_sql), "drop index %.*s",
+                 (int)(idx_end - idx_start), idx_start);
+      }
+    }
+    {
+      char *esc_sql = escape_sql_str(rec_sql);
+      char *esc_inv = escape_sql_str(inverse_sql);
+      char log_buf[12288];
+      snprintf(log_buf, sizeof(log_buf),
+               "insert into vizier.applied_actions "
+               "(recommendation_id, sql_text, inverse_sql, success, notes) "
+               "values (%lld, '%s', '%s', true, 'Applied via vizier_compare')",
+               (long long)rec_id, esc_sql, esc_inv);
+      free(esc_sql);
+      free(esc_inv);
+      duckdb_result lr;
+      memset(&lr, 0, sizeof(lr));
+      duckdb_query(g_flush_conn, log_buf, &lr);
+      duckdb_destroy_result(&lr);
+    }
   }
 
   // Capture plan after
@@ -2182,7 +2246,7 @@ static void compare_bind(duckdb_bind_info info) {
   // Candidate benchmark (after applying)
   double candidate_total = 0;
   {
-    for (int i = 0; i < COMPARE_BENCH_RUNS; i++) {
+    for (int i = 0; i < compare_runs; i++) {
       double start = get_time_ms();
       duckdb_result br;
       memset(&br, 0, sizeof(br));
@@ -2191,7 +2255,7 @@ static void compare_bind(duckdb_bind_info info) {
       candidate_total += get_time_ms() - start;
     }
   }
-  bind_data->candidate_ms = candidate_total / COMPARE_BENCH_RUNS;
+  bind_data->candidate_ms = candidate_total / compare_runs;
   bind_data->speedup = bind_data->candidate_ms > 0
                            ? bind_data->baseline_ms / bind_data->candidate_ms
                            : 0;
@@ -2947,9 +3011,10 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
         memset(&ar, 0, sizeof(ar));
         if (duckdb_query(g_flush_conn, buf, &ar) == DuckDBSuccess) {
           for (size_t i = 0; i < NUM_PERSIST_TABLES; i++) {
-            snprintf(buf, sizeof(buf),
-                     "insert into vizier.%s select * from _vstate.vizier.%s",
-                     vizier_persist_tables[i], vizier_persist_tables[i]);
+            snprintf(
+                buf, sizeof(buf),
+                "insert into vizier.%s by name select * from _vstate.vizier.%s",
+                vizier_persist_tables[i], vizier_persist_tables[i]);
             duckdb_result ir;
             memset(&ir, 0, sizeof(ir));
             duckdb_query(g_flush_conn, buf, &ir);
