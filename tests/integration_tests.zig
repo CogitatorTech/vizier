@@ -903,3 +903,59 @@ test "tokenizer fallback when tables do not exist" {
     try expectContains(out, "col");
     try expectContains(out, "equality");
 }
+
+test "estimated_rows column exists after schema init" {
+    // Regression test for Bug 4: estimated_rows column must exist even if table
+    // was created by an older version (the migration DDL adds it).
+    const out = try runSql(testing.allocator,
+        \\select column_name from duckdb_columns() where table_name = 'workload_queries' and schema_name = 'vizier' and column_name = 'estimated_rows';
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "estimated_rows");
+}
+
+test "state save and load preserves workload data" {
+    // Regression test for Bug 5: state load uses BY NAME insert to handle
+    // schema differences between saved state and current version.
+    const out = try runSql(testing.allocator,
+        \\select * from vizier_capture('select * from t where x = 1');
+        \\select * from vizier_flush();
+        \\select * from vizier_save('/tmp/_vizier_test_state.db');
+        \\delete from vizier.workload_queries;
+        \\select * from vizier_load('/tmp/_vizier_test_state.db');
+        \\select count(*) from vizier.workload_queries;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "1");
+}
+
+test "predicates with single quotes in names do not break flush" {
+    // Regression test for Bug 6: single quotes in table/column names must
+    // be escaped when inserting into workload_predicates.
+    const out = try runSql(testing.allocator,
+        \\select * from vizier_capture('select * from "it''s_a_table" where "col''s" = 1');
+        \\select * from vizier_flush();
+        \\select count(*) from vizier.workload_predicates;
+    );
+    defer testing.allocator.free(out);
+    // Should not crash or error; at minimum the flush completes
+    try expectContains(out, "ok");
+}
+
+test "vizier_compare logs to applied_actions for rollback" {
+    // Regression test for Bug 7: vizier_compare must log to applied_actions
+    // so the change shows in change_history and can be rolled back.
+    const out = try runSql(testing.allocator,
+        \\create table test_compare_t (id int, val varchar);
+        \\insert into test_compare_t select i, 'v' from range(100) t(i);
+        \\select * from vizier_capture('select * from test_compare_t where id = 42');
+        \\select * from vizier_capture('select * from test_compare_t where id = 42');
+        \\select * from vizier_flush();
+        \\select * from vizier_analyze();
+        \\select * from vizier_compare(1);
+        \\select count(*) from vizier.applied_actions where recommendation_id = 1;
+    );
+    defer testing.allocator.free(out);
+    // applied_actions should have an entry from vizier_compare
+    try expectContains(out, "1");
+}

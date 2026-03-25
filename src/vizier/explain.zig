@@ -179,13 +179,26 @@ fn trimPlanLine(line: []const u8) []const u8 {
 }
 
 /// Check if a line is a separator (all dashes, possibly with spaces).
+/// Handles both ASCII dashes '-' and UTF-8 box-drawing dashes '─' (U+2500 = 0xe2 0x94 0x80).
 fn isSeparator(line: []const u8) bool {
     if (line.len < 3) return false;
-    for (line) |c| {
-        if (c != '-' and c != ' ' and c != 0xe2) return false;
-        // Allow UTF-8 dash characters too
+    var i: usize = 0;
+    var dash_count: usize = 0;
+    while (i < line.len) {
+        if (line[i] == '-') {
+            dash_count += 1;
+            i += 1;
+        } else if (line[i] == ' ') {
+            i += 1;
+        } else if (i + 2 < line.len and line[i] == 0xe2 and line[i + 1] == 0x94 and line[i + 2] == 0x80) {
+            // UTF-8 box-drawing horizontal: ─ (U+2500)
+            dash_count += 1;
+            i += 3;
+        } else {
+            return false;
+        }
     }
-    return true;
+    return dash_count >= 3;
 }
 
 /// Extract table name from "memory.main.events" or "catalog.schema.table" format.
@@ -243,6 +256,8 @@ fn classifyFilterOp(line: []const u8) extract.PredicateKind {
     if (std.mem.indexOf(u8, line, " LIKE ") != null) return .like;
     if (std.mem.indexOf(u8, line, " IN ") != null) return .in_list;
     if (std.mem.indexOf(u8, line, " BETWEEN ") != null) return .range;
+    // Check not-equal operators before range operators to avoid misclassifying <> as range
+    if (std.mem.indexOf(u8, line, "<>") != null or std.mem.indexOf(u8, line, "!=") != null) return .equality;
     if (std.mem.indexOf(u8, line, ">=") != null or
         std.mem.indexOf(u8, line, "<=") != null or
         std.mem.indexOf(u8, line, ">") != null or
@@ -384,6 +399,21 @@ test "classifyFilterOp" {
     try std.testing.expectEqual(extract.PredicateKind.range, classifyFilterOp("ts>='2026-01-01'::DATE"));
     try std.testing.expectEqual(extract.PredicateKind.range, classifyFilterOp("amount<100"));
     try std.testing.expectEqual(extract.PredicateKind.like, classifyFilterOp("name LIKE '%foo%'"));
+}
+
+test "isSeparator handles UTF-8 box dashes" {
+    try std.testing.expect(isSeparator("────────────────────"));
+    try std.testing.expect(isSeparator("-------------------"));
+    try std.testing.expect(isSeparator("── ── ── ── ── ──"));
+    try std.testing.expect(!isSeparator("Table:"));
+    try std.testing.expect(!isSeparator("ab"));
+    try std.testing.expect(!isSeparator("Filters:"));
+}
+
+test "classifyFilterOp handles not-equal" {
+    try std.testing.expectEqual(extract.PredicateKind.equality, classifyFilterOp("status<>'active'"));
+    try std.testing.expectEqual(extract.PredicateKind.equality, classifyFilterOp("status!='active'"));
+    try std.testing.expectEqual(extract.PredicateKind.range, classifyFilterOp("amount>100"));
 }
 
 test "extractColumnFromFilter" {

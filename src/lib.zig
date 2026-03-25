@@ -49,6 +49,25 @@ pub export fn zig_normalize_sql(
     out_len.* = normalized.len;
 }
 
+/// Escape single quotes in a string for safe SQL embedding.
+/// Writes into the provided buffer and returns the escaped slice.
+fn escapeSql(input: []const u8, buf: []u8) []const u8 {
+    var i: usize = 0;
+    for (input) |c| {
+        if (c == '\'') {
+            if (i + 2 > buf.len) return input; // fallback to unescaped if buffer full
+            buf[i] = '\'';
+            buf[i + 1] = '\'';
+            i += 2;
+        } else {
+            if (i + 1 > buf.len) return input;
+            buf[i] = c;
+            i += 1;
+        }
+    }
+    return buf[0..i];
+}
+
 /// Extract predicates/tables from a SQL string and store in metadata tables.
 /// Called from flush_pending() in extension.c with the open connection.
 ///
@@ -86,13 +105,18 @@ pub export fn zig_extract_and_store(
     const del_sql = std.fmt.bufPrint(&del_buf, "delete from vizier.workload_predicates where query_signature = '{s}'\x00", .{sig}) catch return false;
     sql_runner.runOnConn(conn, @ptrCast(del_sql.ptr)) catch {};
 
-    // Insert each predicate
+    // Insert each predicate (escape table/column names to handle single quotes)
     for (result.predicateSlice()) |pred| {
+        var esc_table_buf: [256]u8 = undefined;
+        var esc_col_buf: [256]u8 = undefined;
+        const esc_table = escapeSql(pred.table_name, &esc_table_buf);
+        const esc_col = escapeSql(pred.column_name, &esc_col_buf);
+
         var ins_buf: [1024]u8 = undefined;
         const ins_sql = std.fmt.bufPrint(&ins_buf, "insert into vizier.workload_predicates (query_signature, table_name, column_name, predicate_kind) values ('{s}', '{s}', '{s}', '{s}')\x00", .{
             sig,
-            pred.table_name,
-            pred.column_name,
+            esc_table,
+            esc_col,
             pred.kind.toStr(),
         }) catch continue;
         sql_runner.runOnConn(conn, @ptrCast(ins_sql.ptr)) catch {};
