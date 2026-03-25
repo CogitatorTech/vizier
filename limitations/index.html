@@ -587,17 +587,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#large-api-surface" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Large API Surface
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#best-suited-for-persistent-repeated-workloads" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -698,17 +687,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#large-api-surface" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Large API Surface
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#best-suited-for-persistent-repeated-workloads" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -751,12 +729,12 @@ This means the quality of recommendations depends entirely on whether you feed V
 <p>Vizier uses two extraction strategies during a flush:</p>
 <ol>
 <li>
-<p><strong>EXPLAIN-based extraction</strong> (preferred): runs <code>EXPLAIN</code> on the captured query using DuckDB's own parser.
+<p>EXPLAIN-based extraction (preferred deafult): runs <code>EXPLAIN</code> on the captured query using DuckDB's own parser.
    This produces accurate table references, filter predicates, and estimated row counts directly from the
    query plan. Note that it only works when the referenced tables exist in the current database.</p>
 </li>
 <li>
-<p><strong>Tokenizer-based extraction</strong> (fallback): a hand-rolled tokenizer that parses SQL text without
+<p>Tokenizer-based extraction (fallback): a hand-rolled tokenizer that parses SQL text without
    database access. Used when <code>EXPLAIN</code> fails (e.g., tables do not exist, or the query uses unsupported syntax).</p>
 </li>
 </ol>
@@ -790,10 +768,6 @@ The index advisor may recommend indexes that DuckDB does not use for the queries
 and others by <code>region</code>), the sort and Parquet advisors pick the most frequent pattern.
 They do not report the tradeoff or warn that other queries may regress.</p>
 <p>Use <code>vizier_replay()</code> after applying a sort recommendation to check for regressions across the full workload.</p>
-<h2 id="large-api-surface">Large API Surface<a class="headerlink" href="#large-api-surface" title="Permanent link">&para;</a></h2>
-<p>Vizier exposes 22 functions, 8 macros, 5 views, 8 metadata tables, and 14 settings.
-Some of these may change or be removed in future versions.
-Pin your usage to specific Vizier versions if you depend on the API in scripts or pipelines.</p>
 <h2 id="best-suited-for-persistent-repeated-workloads">Best Suited for Persistent, Repeated Workloads<a class="headerlink" href="#best-suited-for-persistent-repeated-workloads" title="Permanent link">&para;</a></h2>
 <p>Vizier works best when queries repeat over time against a persistent DuckDB database.
 It is less useful for:</p>
