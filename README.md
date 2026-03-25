@@ -137,7 +137,7 @@ Example output:
 
 ### Documentation
 
-Check out the project documentation [here](https://cogitatortech.github.io/vizier/) for more details, including examples and API reference.
+Check out the [project documentation](https://cogitatortech.github.io/vizier/) for more details, including examples and API reference.
 
 ### Benchmarks
 
