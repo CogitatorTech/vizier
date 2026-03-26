@@ -50,7 +50,7 @@ select * from vizier_benchmark('select * from events where account_id = 42', 10)
 
 Vizier is most useful for:
 
-- Analyzing your query patterns and recommends the sort order and partitioning strategy for Parquet exports. Getting the
+- Analyzing your query patterns and recommending the sort order and partitioning strategy for Parquet exports. Getting the
   sort order wrong means 10-100x worse row-group pruning.
 - Optimizing persistent DuckDB tables. If you have tables that get scanned repeatedly with the same filter patterns, Vizier identifies which columns
   to sort by for scan pruning.
