@@ -123,7 +123,7 @@ pub const sort_advisor_sql: [*:0]const u8 =
     \\    || ' (sort quality: ' || round(count(*)::double / greatest(coalesce(max(t.column_count), 1), 1) * 100, 0)::bigint || '%)'
     \\    || '; rewriting sorted may improve scan pruning'
     \\    || case when coalesce(max(t.estimated_size), 0) > 1000000
-    \\      then ' (estimated ' || (coalesce(max(t.estimated_size), 0) / 1000000)::bigint || 'MB — row-group pruning likely beneficial)'
+    \\      then ' (estimated ' || (coalesce(max(t.estimated_size), 0) / 1000000)::bigint || 'MB; row-group pruning likely beneficial)'
     \\      else ''
     \\    end,
     \\  'create or replace table ' || p.table_name || ' as select * from ' || p.table_name || ' order by ' || string_agg(p.column_name, ', ' order by p.freq desc),
@@ -161,7 +161,7 @@ pub const redundant_index_advisor_sql: [*:0]const u8 =
     \\  0.7,
     \\  0.85,
     \\  'Index ' || i1.index_name || ' (' || i1.expressions || ') on ' || i1.table_name
-    \\    || ' is redundant — covered by ' || i2.index_name || ' (' || i2.expressions || ')',
+    \\    || ' is redundant; covered by ' || i2.index_name || ' (' || i2.expressions || ')',
     \\  'drop index ' || i1.index_name,
     \\  0.3, 0.0, -0.1
     \\from duckdb_indexes() i1
@@ -380,7 +380,7 @@ pub const join_path_advisor_sql: [*:0]const u8 =
 
 /// SQL to run the no-action advisor.
 /// Emits 'no_action' for tables that appear in the workload but have no
-/// pending actionable recommendations — confirming they are well-optimized.
+/// pending actionable recommendations, confirming they are well-optimized.
 pub const no_action_advisor_sql: [*:0]const u8 =
     \\insert into vizier.recommendation_store
     \\  (kind, table_name, columns_json, score, confidence, reason, sql_text,
@@ -391,7 +391,7 @@ pub const no_action_advisor_sql: [*:0]const u8 =
     \\  '[]',
     \\  0.0,
     \\  1.0,
-    \\  'Table ' || t.table_name || ' appears in the workload and has no pending recommendations — no changes needed',
+    \\  'Table ' || t.table_name || ' appears in the workload and has no pending recommendations; no changes needed',
     \\  '',
     \\  0.0, 0.0, 0.0
     \\from (

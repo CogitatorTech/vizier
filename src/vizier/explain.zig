@@ -106,7 +106,7 @@ pub fn parsePlan(plan: []const u8) ExplainResult {
             continue;
         }
 
-        // Estimated rows (e.g., "~2 rows", "~1 row") — check before filters/conditions
+        // Estimated rows (e.g., "~2 rows", "~1 row"); check before filters/conditions
         if (line.len > 1 and line[0] == '~') {
             in_filters = false;
             in_conditions = false;

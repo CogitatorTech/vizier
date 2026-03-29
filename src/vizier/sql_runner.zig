@@ -13,7 +13,7 @@ pub const RunError = error{
 };
 
 /// Execute a SQL statement on an existing connection.
-/// The caller owns the connection — this function does not open or close it.
+/// The caller owns the connection; this function does not open or close it.
 pub fn runOnConn(conn: duckdb.duckdb_connection, sql: [*:0]const u8) RunError!void {
     var result: duckdb.duckdb_result = std.mem.zeroes(duckdb.duckdb_result);
     if (duckdb_ext_api.duckdb_query.?(conn, sql, &result) != DuckDBSuccess) {

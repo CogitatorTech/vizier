@@ -294,7 +294,7 @@ static void vizier_configure_func(duckdb_function_info info,
 }
 
 // ============================================================================
-// vizier_init(path) — set state_path and load existing state if file exists
+// vizier_init(path): set state_path and load existing state if file exists
 // ============================================================================
 
 typedef struct {
@@ -908,7 +908,7 @@ static void rollback_execute(duckdb_function_info info,
 }
 
 // ============================================================================
-// vizier_rollback_all() table function — undo all applied in reverse order
+// vizier_rollback_all() table function: undo all applied in reverse order
 // ============================================================================
 
 typedef struct {
@@ -1224,7 +1224,7 @@ static void apply_all_execute(duckdb_function_info info,
 }
 
 // ============================================================================
-// vizier_start_capture() / vizier_stop_capture() — session capture
+// vizier_start_capture() / vizier_stop_capture(): session capture
 //
 // start_capture enables query logging to vizier.session_log table.
 // stop_capture reads from session_log, captures each query, and flushes.
@@ -2025,7 +2025,7 @@ static size_t capture_explain_plan(duckdb_connection conn, const char *sql,
   if (duckdb_query(conn, explain_sql, &result) == DuckDBSuccess) {
     duckdb_data_chunk chunk = duckdb_fetch_chunk(result);
     if (chunk && duckdb_data_chunk_get_size(chunk) > 0) {
-      // EXPLAIN returns (explain_key, explain_value) — we want explain_value
+      // EXPLAIN returns (explain_key, explain_value): we want explain_value
       idx_t ncols = duckdb_data_chunk_get_column_count(chunk);
       idx_t val_col = ncols > 1 ? 1 : 0;
       duckdb_vector vec = duckdb_data_chunk_get_vector(chunk, val_col);
@@ -2332,7 +2332,7 @@ static void compare_execute(duckdb_function_info info,
 }
 
 // ============================================================================
-// vizier_replay() table function — re-runs all captured queries
+// vizier_replay() table function: re-runs all captured queries
 // ============================================================================
 
 #define REPLAY_RUNS 3
@@ -2501,7 +2501,7 @@ static void replay_execute(duckdb_function_info info,
 }
 
 // ============================================================================
-// vizier_report(path) — export a static HTML report
+// vizier_report(path): export a static HTML report
 // ============================================================================
 
 typedef struct {
@@ -2635,7 +2635,7 @@ static void report_execute(duckdb_function_info info,
 }
 
 // ============================================================================
-// vizier_dashboard(path) — interactive HTML dashboard
+// vizier_dashboard(path): interactive HTML dashboard
 // ============================================================================
 
 // Helper: run a query returning a single JSON string column, malloc result.
@@ -2791,7 +2791,7 @@ static void dashboard_execute(duckdb_function_info info,
 }
 
 // ============================================================================
-// vizier_analyze() table function — runs all advisors
+// vizier_analyze() table function: runs all advisors
 // ============================================================================
 
 typedef struct {
@@ -3005,7 +3005,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection conn, duckdb_extension_info info,
         memcpy(path, ptr, cl);
         path[cl] = '\0';
 
-        // Try to attach and load (ignore errors — file may not exist yet)
+        // Try to attach and load (ignore errors: file may not exist yet)
         char *esc = escape_sql_str(path);
         char buf[1024];
         snprintf(buf, sizeof(buf), "attach '%s' as _vstate (read_only)", esc);

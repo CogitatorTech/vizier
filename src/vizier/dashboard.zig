@@ -1,6 +1,6 @@
 /// HTML dashboard template for vizier_dashboard(path).
 /// The marker VIZIER_JSON_DATA gets replaced with a JSON object at runtime.
-/// This template is compiled into the extension binary — no external files needed.
+/// This template is compiled into the extension binary; no external files needed.
 pub const template_before: [*:0]const u8 =
     \\<!DOCTYPE html>
     \\<html lang="en">
@@ -97,7 +97,7 @@ pub const template_after: [*:0]const u8 =
     \\  const actEl=document.getElementById('actions');
     \\  if(acts.length){actEl.innerHTML=`<div class="card"><div class="card-header">Applied Changes (${acts.length})</div><div class="card-body"><table><thead><tr><th>ID</th><th>SQL</th><th>Success</th><th>Notes</th><th>Rollback</th></tr></thead><tbody id="act-body" data-renderer="actRow"></tbody></table></div></div>`;const actBody=document.getElementById('act-body');renderRows(actBody,acts,'actRow')}else{actEl.innerHTML='<div class="card"><div class="card-body empty">No applied changes</div></div>'}
     \\  const repEl=document.getElementById('replay');
-    \\  if(rep.length){repEl.innerHTML=`<div class="card"><div class="card-header">Replay Results (${rep.length} queries)</div><div class="card-body"><table><thead><tr><th>Signature</th><th>SQL</th><th onclick="sortTable(repBody,'avg_ms',rep)">Avg ms</th><th>Verdict</th></tr></thead><tbody id="rep-body" data-renderer="repRow"></tbody></table></div></div>`;const repBody=document.getElementById('rep-body');renderRows(repBody,rep,'repRow')}else{repEl.innerHTML='<div class="card"><div class="card-body empty">No replay results — run vizier_replay() first</div></div>'}
+    \\  if(rep.length){repEl.innerHTML=`<div class="card"><div class="card-header">Replay Results (${rep.length} queries)</div><div class="card-body"><table><thead><tr><th>Signature</th><th>SQL</th><th onclick="sortTable(repBody,'avg_ms',rep)">Avg ms</th><th>Verdict</th></tr></thead><tbody id="rep-body" data-renderer="repRow"></tbody></table></div></div>`;const repBody=document.getElementById('rep-body');renderRows(repBody,rep,'repRow')}else{repEl.innerHTML='<div class="card"><div class="card-body empty">No replay results. Run vizier_replay() first</div></div>'}
     \\  document.getElementById('overview').innerHTML=`<div class="card"><div class="card-header">Summary</div><div class="card-body"><p><strong>${recs.length}</strong> pending recommendations across <strong>${[...new Set(recs.map(r=>r.table_name))].length}</strong> tables</p><p><strong>${wl.length}</strong> captured query patterns, <strong>${wl.reduce((s,w)=>s+w.runs,0)}</strong> total executions</p><p><strong>${acts.length}</strong> changes applied, <strong>${acts.filter(a=>a.can_rollback).length}</strong> reversible</p></div></div>`
     \\}
     \\init();
