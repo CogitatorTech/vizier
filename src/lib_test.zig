@@ -1,4 +1,4 @@
-// Test harness — pulls in all inline tests from vizier modules.
+// This test harness pulls in all inline tests from vizier modules.
 // No tests defined here; all unit and regression tests live in their modules.
 
 comptime {

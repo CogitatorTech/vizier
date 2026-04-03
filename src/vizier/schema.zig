@@ -345,7 +345,7 @@ const create_explain_human_macro_sql =
     \\        end
     \\        || case when r.confidence >= 0.9 then ' High confidence.'
     \\                when r.confidence >= 0.7 then ' Good confidence.'
-    \\                else ' Moderate confidence — verify with a benchmark.'
+    \\                else ' Moderate confidence; verify with a benchmark.'
     \\        end
     \\      when 'rewrite_sorted_table' then
     \\        'Table ' || r.table_name || ' would benefit from being sorted by ' || r.columns_json

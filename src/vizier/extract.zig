@@ -312,7 +312,7 @@ fn isJoinKw(tok: Token) bool {
         isKw(tok, "NATURAL") or isKw(tok, "FULL");
 }
 
-/// Main extraction entry point — pure function, no DB access.
+/// Main extraction entry point: pure function, no DB access.
 pub fn extractFromSql(sql: []const u8) ExtractionResult {
     const tok_result = tokenize(sql);
     const tokens = tok_result.tokens[0..tok_result.count];
@@ -333,7 +333,7 @@ fn extractTables(tokens: []const Token, result: *ExtractionResult) void {
         // Look for from or join keywords
         if (isKw(tokens[i], "FROM") or isKw(tokens[i], "JOIN")) {
             i += 1;
-            // Skip extra join modifiers (e.g., left OUTER join — we already consumed JOIN,
+            // Skip extra join modifiers (e.g., left OUTER join; we already consumed JOIN,
             // but if we matched LEFT, skip until JOIN)
             if (isKw(tokens[i -| 1], "FROM")) {
                 // nothing extra to skip
@@ -342,7 +342,7 @@ fn extractTables(tokens: []const Token, result: *ExtractionResult) void {
             }
             // After FROM/JOIN, expect table name (skip lparen for subqueries)
             if (i < tokens.len and tokens[i].kind == .lparen) {
-                // Subquery — skip to matching rparen
+                // Subquery: skip to matching rparen
                 var depth: usize = 1;
                 i += 1;
                 while (i < tokens.len and depth > 0) {
@@ -363,7 +363,7 @@ fn extractTables(tokens: []const Token, result: *ExtractionResult) void {
             var table_name = tokens[i].text;
             i += 1;
 
-            // Check for schema.table — use just the table part for simplicity
+            // Check for schema.table; use just the table part for simplicity
             if (i + 1 < tokens.len and tokens[i].kind == .dot and tokens[i + 1].kind == .identifier) {
                 table_name = tokens[i + 1].text;
                 i += 2;
@@ -383,7 +383,7 @@ fn extractTables(tokens: []const Token, result: *ExtractionResult) void {
             continue;
         }
 
-        // Skip join modifiers (LEFT, RIGHT, etc.) — they precede join
+        // Skip join modifiers (LEFT, RIGHT, etc.); they precede join
         if (isJoinKw(tokens[i]) and !isKw(tokens[i], "JOIN")) {
             i += 1;
             // Skip until we hit join
@@ -399,7 +399,7 @@ fn extractPredicates(tokens: []const Token, result: *ExtractionResult) void {
     var i: usize = 0;
 
     while (i < tokens.len) {
-        // where / and / or — expect predicate LHS
+        // where / and / or: expect predicate LHS
         if (isKw(tokens[i], "WHERE") or isKw(tokens[i], "AND") or isKw(tokens[i], "OR") or isKw(tokens[i], "ON")) {
             i += 1;
             // Skip not
@@ -418,7 +418,7 @@ fn extractPredicates(tokens: []const Token, result: *ExtractionResult) void {
             i += 1;
 
             if (i + 1 < tokens.len and tokens[i].kind == .dot and tokens[i + 1].kind == .identifier) {
-                // prefix.column — resolve prefix
+                // prefix.column: resolve prefix
                 table_name = result.resolveAlias(column_name);
                 column_name = tokens[i + 1].text;
                 i += 2;
@@ -461,7 +461,7 @@ fn extractPredicates(tokens: []const Token, result: *ExtractionResult) void {
                 result.addPredicate(table_name, column_name, .range);
                 i += 1;
             } else if (isKw(tokens[i], "IS")) {
-                // is null / IS not NULL — treat as equality
+                // is null / IS not NULL: treat as equality
                 result.addPredicate(table_name, column_name, .equality);
                 i += 1;
             }
@@ -589,7 +589,7 @@ pub fn buildColumnsJson(result: *const ExtractionResult, buf: []u8) []const u8 {
     w.writeByte('[') catch return "[]";
     var written: usize = 0;
     for (result.predicateSlice()) |p| {
-        // Skip group_by and order_by for the columns JSON — just filter/join columns
+        // Skip group_by and order_by for the columns JSON; just filter/join columns
         if (p.kind == .group_by or p.kind == .order_by) continue;
         if (written > 0) w.writeByte(',') catch return "[]";
         w.print("\"{s}.{s}\"", .{ p.table_name, p.column_name }) catch return "[]";

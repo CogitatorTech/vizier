@@ -793,7 +793,7 @@ test "save and load persist state across sessions" {
     defer testing.allocator.free(out);
     try expectContains(out, "ok");
 
-    // Load into a fresh session — queries should survive
+    // Load into a fresh session; queries should survive
     const out2 = try runSql(testing.allocator,
         \\select * from vizier_load('/tmp/vizier_test_state.db');
         \\select count(*) from vizier.workload_queries;
@@ -1061,7 +1061,7 @@ test "analyze produces no_action for well-optimized tables" {
         \\select kind from vizier.recommendation_store where table_name = 'noact_t';
     );
     defer testing.allocator.free(out);
-    // Table has predicates but nothing actionable — should get no_action
+    // Table has predicates but nothing actionable; should get no_action
     try expectContains(out, "no_action");
 }
 
