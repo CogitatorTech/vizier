@@ -111,3 +111,5 @@ NOTES.md
 .claude/
 *.parquet
 site/
+.codex
+zig-pkg/

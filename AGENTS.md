@@ -21,6 +21,15 @@ Priorities, in order:
 - Add comments only when they clarify non-obvious behavior.
 - Do not add features, error handling, or abstractions beyond what is needed for the current task.
 
+## Writing Style
+
+- Use Oxford commas in inline lists: "a, b, and c" not "a, b, c".
+- Do not use em dashes. Restructure the sentence, or use a colon or semicolon instead.
+- Avoid colorful adjectives and adverbs. Write "TCP proxy" not "lightweight TCP proxy", "scoring components" not "transparent scoring components".
+- Use noun phrases for checklist items, not imperative verbs. Write "redundant index detection" not "detect redundant indexes".
+- Headings in Markdown files must be in the title case: "Build from Source" not "Build from source". Minor words (a, an, the, and, but, or, for, in,
+  on, at, to, by, of, is, are, was, were, be) stay lowercase unless they are the first word.
+
 ## Repository Layout
 
 - `src/extension.c`: C entry point, DuckDB function registration, capture/flush logic. Uses `add_pending_capture()` helper for all capture
@@ -156,7 +165,7 @@ Before submitting:
 - PR descriptions should include:
     1. Behavioral change summary.
     2. Tests added/updated.
-    3. Interactive verification done (yes/no).
+    3. Interactive verification is done (yes/no).
     4. Docs updated (yes/no).
 
 Suggested PR checklist:
