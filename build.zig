@@ -205,7 +205,10 @@ pub fn build(b: *std.Build) void {
     const gen_bindings_step = b.step("duckdb-translate", "Generate Zig bindings from DuckDB C API");
     const capi_dir = ext_template_capi_path.getPath(b);
     const ext_header = ext_template_dep.path("duckdb_capi/duckdb_extension.h").getPath(b);
-    const translate_shell = b.fmt("zig translate-c -I {s} {s} > src/duckdb.zig", .{ capi_dir, ext_header });
+    // Pipe through sed to strip machine-specific source-location comments
+    // (lines like `// /abs/path/foo.h:123:4`) that translate-c emits, so
+    // src/duckdb.zig does not churn per user on regeneration.
+    const translate_shell = b.fmt("zig translate-c -I {s} {s} | sed '/^\\/\\/ \\/.*\\.h:[0-9][0-9]*:[0-9][0-9]*$/d' > src/duckdb.zig", .{ capi_dir, ext_header });
     const translate_cmd = b.addSystemCommand(&[_][]const u8{
         "sh",
         "-c",
