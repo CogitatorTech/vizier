@@ -107,7 +107,7 @@ jobs:
 
       - name: Package release asset
         run: |
-          zip -j ${{ env.EXTENSION_NAME }}-linux-amd64.zip zig-out/lib/linux_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          gzip -c -n zig-out/lib/linux_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension > ${{ env.EXTENSION_NAME }}-linux-amd64.gz
 
       - name: Upload release asset
         uses: actions/upload-release-asset@v1
@@ -115,9 +115,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ env.EXTENSION_NAME }}-linux-amd64.zip
-          asset_name: ${{ env.EXTENSION_NAME }}-linux-amd64.zip
-          asset_content_type: application/zip
+          asset_path: ./${{ env.EXTENSION_NAME }}-linux-amd64.gz
+          asset_name: ${{ env.EXTENSION_NAME }}-linux-amd64.gz
+          asset_content_type: application/gzip
 
   build-linux-arm64:
     name: Build Linux ARM64 (cross-compile)
@@ -167,7 +167,7 @@ jobs:
 
       - name: Package release asset
         run: |
-          zip -j ${{ env.EXTENSION_NAME }}-linux-arm64.zip zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          gzip -c -n zig-out/lib/linux_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension > ${{ env.EXTENSION_NAME }}-linux-arm64.gz
 
       - name: Upload release asset
         uses: actions/upload-release-asset@v1
@@ -175,9 +175,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ env.EXTENSION_NAME }}-linux-arm64.zip
-          asset_name: ${{ env.EXTENSION_NAME }}-linux-arm64.zip
-          asset_content_type: application/zip
+          asset_path: ./${{ env.EXTENSION_NAME }}-linux-arm64.gz
+          asset_name: ${{ env.EXTENSION_NAME }}-linux-arm64.gz
+          asset_content_type: application/gzip
 
   build-linux-amd64-musl:
     name: Build Linux AMD64 (musl)
@@ -227,7 +227,7 @@ jobs:
 
       - name: Package release asset
         run: |
-          zip -j ${{ env.EXTENSION_NAME }}-linux-amd64-musl.zip zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
+          gzip -c -n zig-out/lib/linux_amd64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension > ${{ env.EXTENSION_NAME }}-linux-amd64-musl.gz
 
       - name: Upload release asset
         uses: actions/upload-release-asset@v1
@@ -235,9 +235,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ env.EXTENSION_NAME }}-linux-amd64-musl.zip
-          asset_name: ${{ env.EXTENSION_NAME }}-linux-amd64-musl.zip
-          asset_content_type: application/zip
+          asset_path: ./${{ env.EXTENSION_NAME }}-linux-amd64-musl.gz
+          asset_name: ${{ env.EXTENSION_NAME }}-linux-amd64-musl.gz
+          asset_content_type: application/gzip
 
   build-linux-arm64-musl:
     name: Build Linux ARM64 musl (cross-compile)
@@ -287,7 +287,7 @@ jobs:
 
       - name: Package release asset
         run: |
-          zip -j ${{ env.EXTENSION_NAME }}-linux-arm64-musl.zip zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension
+          gzip -c -n zig-out/lib/linux_arm64_musl/${{ env.EXTENSION_NAME }}.duckdb_extension > ${{ env.EXTENSION_NAME }}-linux-arm64-musl.gz
 
       - name: Upload release asset
         uses: actions/upload-release-asset@v1
@@ -295,9 +295,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ env.EXTENSION_NAME }}-linux-arm64-musl.zip
-          asset_name: ${{ env.EXTENSION_NAME }}-linux-arm64-musl.zip
-          asset_content_type: application/zip
+          asset_path: ./${{ env.EXTENSION_NAME }}-linux-arm64-musl.gz
+          asset_name: ${{ env.EXTENSION_NAME }}-linux-arm64-musl.gz
+          asset_content_type: application/gzip
 
   build-macos-arm64:
     name: Build macOS ARM64
@@ -351,7 +351,7 @@ jobs:
 
       - name: Package release asset
         run: |
-          zip -j ${{ env.EXTENSION_NAME }}-macos-arm64.zip zig-out/lib/osx_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          gzip -c -n zig-out/lib/osx_arm64/${{ env.EXTENSION_NAME }}.duckdb_extension > ${{ env.EXTENSION_NAME }}-macos-arm64.gz
 
       - name: Upload release asset
         uses: actions/upload-release-asset@v1
@@ -359,9 +359,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ env.EXTENSION_NAME }}-macos-arm64.zip
-          asset_name: ${{ env.EXTENSION_NAME }}-macos-arm64.zip
-          asset_content_type: application/zip
+          asset_path: ./${{ env.EXTENSION_NAME }}-macos-arm64.gz
+          asset_name: ${{ env.EXTENSION_NAME }}-macos-arm64.gz
+          asset_content_type: application/gzip
 
   build-windows-amd64:
     name: Build Windows AMD64
@@ -541,7 +541,7 @@ jobs:
 
       - name: Package release asset
         run: |
-          zip -j ${{ env.EXTENSION_NAME }}-freebsd-amd64.zip zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension
+          gzip -c -n zig-out/lib/freebsd_amd64/${{ env.EXTENSION_NAME }}.duckdb_extension > ${{ env.EXTENSION_NAME }}-freebsd-amd64.gz
 
       - name: Upload release asset
         uses: actions/upload-release-asset@v1
@@ -549,9 +549,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ env.EXTENSION_NAME }}-freebsd-amd64.zip
-          asset_name: ${{ env.EXTENSION_NAME }}-freebsd-amd64.zip
-          asset_content_type: application/zip
+          asset_path: ./${{ env.EXTENSION_NAME }}-freebsd-amd64.gz
+          asset_name: ${{ env.EXTENSION_NAME }}-freebsd-amd64.gz
+          asset_content_type: application/gzip
 
   deploy-pages:
     name: Deploy docs and extension repository

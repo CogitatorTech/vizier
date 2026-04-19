@@ -34,14 +34,14 @@ The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.1
 
 Open the [latest release](https://github.com/CogitatorTech/vizier/releases/latest) for release notes and platform-specific zip downloads:
 
-- Linux AMD64: `vizier-linux-amd64.zip`
-- Linux ARM64: `vizier-linux-arm64.zip`
-- Linux AMD64 (musl): `vizier-linux-amd64-musl.zip`
-- Linux ARM64 (musl): `vizier-linux-arm64-musl.zip`
-- macOS ARM64: `vizier-macos-arm64.zip`
+- Linux AMD64: `vizier-linux-amd64.gz`
+- Linux ARM64: `vizier-linux-arm64.gz`
+- Linux AMD64 (musl): `vizier-linux-amd64-musl.gz`
+- Linux ARM64 (musl): `vizier-linux-arm64-musl.gz`
+- macOS ARM64: `vizier-macos-arm64.gz`
 - Windows AMD64: `vizier-windows-amd64.zip`
 - Windows ARM64: `vizier-windows-arm64.zip`
-- FreeBSD AMD64: `vizier-freebsd-amd64.zip`
+- FreeBSD AMD64: `vizier-freebsd-amd64.gz`
 
 ## Loading the Extension
 
