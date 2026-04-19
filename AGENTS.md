@@ -27,6 +27,7 @@ Priorities, in order:
 - Do not use em dashes. Restructure the sentence, or use a colon or semicolon instead.
 - Avoid colorful adjectives and adverbs. Write "TCP proxy" not "lightweight TCP proxy", "scoring components" not "transparent scoring components".
 - Use noun phrases for checklist items, not imperative verbs. Write "redundant index detection" not "detect redundant indexes".
+- SQL keywords in prose should be backticked: `` `JOIN` ``, `` `EXPLAIN` ``, `` `CREATE INDEX` ``.
 - Headings in Markdown files must be in the title case: "Build from Source" not "Build from source". Minor words (a, an, the, and, but, or, for, in,
   on, at, to, by, of, is, are, was, were, be) stay lowercase unless they are the first word.
 
@@ -97,16 +98,6 @@ Multiple capture methods feed into the same `g_pending` buffer:
 - C formatting is handled by `clang-format`; Zig formatting by `zig fmt`.
 - SQL keywords must be lowercase. Write `select`, `from`, `where`, `create table`, not `SELECT`, `FROM`, `WHERE`, `CREATE TABLE`. This applies to all
   SQL strings in Zig modules, C source, and generated recommendation SQL.
-
-## Writing Style
-
-- Use Oxford commas in inline lists: "a, b, and c" not "a, b, c".
-- Do not use em dashes. Restructure the sentence, or use a colon or semicolon instead.
-- Avoid colorful adjectives and adverbs. Write "TCP proxy" not "lightweight TCP proxy", "scoring components" not "transparent scoring components".
-- Use noun phrases for checklist items, not imperative verbs. Write "redundant index detection" not "detect redundant indexes".
-- SQL keywords in prose should be backticked: `` `JOIN` ``, `` `EXPLAIN` ``, `` `CREATE INDEX` ``.
-- Headings in Markdown files must be in the title case: "Build from Source" not "Build from source". Minor words (a, an, the, and, but, or, for, in, on,
-  at, to, by, of) stay lowercase unless they are the first word.
 
 ## Required Validation
 

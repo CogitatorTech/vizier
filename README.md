@@ -61,8 +61,10 @@ See [ROADMAP.md](ROADMAP.md) for the list of implemented and planned features.
 Install Vizier from the hosted DuckDB extension repository:
 
 ```sql
-install vizier from 'https://cogitatortech.github.io/vizier/extensions';
-load vizier;
+install
+vizier from 'https://cogitatortech.github.io/vizier/extensions';
+load
+vizier;
 ```
 
 The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.2`.
@@ -106,19 +108,26 @@ make duckdb
 The example below assumes you install Vizier from the hosted extension repository.
 
 ```sql
-install vizier from 'https://cogitatortech.github.io/vizier/extensions';
-load vizier;
+install
+vizier from 'https://cogitatortech.github.io/vizier/extensions';
+load
+vizier;
 
 -- Capture queries from your workload
-select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
-select * from vizier_capture('select count(*) from orders group by customer_id');
-select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
+select *
+from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
+select *
+from vizier_capture('select count(*) from orders group by customer_id');
+select *
+from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
 
 -- Persist captured queries to metadata tables
-select * from vizier_flush();
+select *
+from vizier_flush();
 
 -- View workload summary (ordered by frequency)
-select * from vizier.workload_summary;
+select *
+from vizier.workload_summary;
 ```
 
 Example output:
