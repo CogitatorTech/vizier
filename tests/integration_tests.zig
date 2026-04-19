@@ -8,18 +8,25 @@ fn runSql(allocator: std.mem.Allocator, sql: []const u8) ![]const u8 {
     var full_sql_buf: [8192]u8 = undefined;
     const full_sql = try std.fmt.bufPrint(&full_sql_buf, "load '{s}';\n{s}", .{ extension_path, sql });
 
-    const result = try std.process.Child.run(.{
-        .allocator = allocator,
+    var threaded: std.Io.Threaded = .init(std.heap.page_allocator, .{});
+    defer threaded.deinit();
+    if (std.Options.debug_threaded_io) |debug_threaded| {
+        threaded.argv0 = debug_threaded.argv0;
+        threaded.environ = .{ .process_environ = debug_threaded.environ.process_environ };
+        threaded.environ_initialized = false;
+    }
+
+    const result = try std.process.run(std.heap.page_allocator, threaded.io(), .{
         .argv = &.{ "duckdb", "-unsigned", "-noheader", "-csv", "-c", full_sql },
     });
-    allocator.free(result.stderr);
+    defer std.heap.page_allocator.free(result.stderr);
+    defer std.heap.page_allocator.free(result.stdout);
 
-    if (result.term.Exited != 0) {
-        defer allocator.free(result.stdout);
+    if (result.term != .exited or result.term.exited != 0) {
         return error.DuckDBFailed;
     }
 
-    return result.stdout;
+    return allocator.dupe(u8, result.stdout);
 }
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
