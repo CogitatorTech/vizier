@@ -29,6 +29,7 @@ pub fn build(b: *std.Build) void {
     // Build options passed to library code
     const build_options = b.addOptions();
     build_options.addOption([]const u8, "version", zon_version);
+    build_options.addOption([]const u8, "duckdb_path", b.findProgram(&.{"duckdb"}, &.{}) catch "");
 
     const root_module = b.createModule(.{
         .root_source_file = b.path("src/lib.zig"),
@@ -167,6 +168,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    integration_test_module.addImport("build_options", build_options.createModule());
 
     const integration_tests = b.addTest(.{
         .root_module = integration_test_module,

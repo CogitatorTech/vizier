@@ -6,7 +6,7 @@
 [![Benchmarks](https://img.shields.io/github/actions/workflow/status/CogitatorTech/vizier/benchmarks.yml?label=benchmarks&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/actions/workflows/benchmarks.yml)
 [![Docs](https://img.shields.io/badge/docs-read-007ec6?label=docs&style=flat&labelColor=282c34&logo=readthedocs)](https://cogitatortech.github.io/vizier/)
 [![License](https://img.shields.io/badge/license-MIT-007ec6?label=license&style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/CogitatorTech/vizier/blob/main/LICENSE)
-[![Zig](https://img.shields.io/badge/zig-0.15.2-F7A41D?style=flat&labelColor=282c34&logo=zig)](https://ziglang.org/download/)
+[![Zig](https://img.shields.io/badge/zig-0.16.0-F7A41D?style=flat&labelColor=282c34&logo=zig)](https://ziglang.org/download/)
 [![Release](https://img.shields.io/github/release/CogitatorTech/vizier.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/releases/latest)
 
 A physical design advisor for DuckDB
@@ -65,7 +65,7 @@ install vizier from 'https://cogitatortech.github.io/vizier/extensions';
 load vizier;
 ```
 
-The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.1`.
+The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.2`.
 
 > [!IMPORTANT]
 > Vizier is currently not available on DuckDB's community extensions repository and is distributed as an unsigned extension.

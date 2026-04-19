@@ -1887,14 +1887,14 @@ pub const offsetof = @compileError("unable to translate C expr: unexpected token
 pub const DUCKDB_EXTENSION_EXTERN_C_GUARD_OPEN = "";
 pub const DUCKDB_EXTENSION_EXTERN_C_GUARD_CLOSE = "";
 pub const DUCKDB_EXTENSION_GLUE_HELPER = @compileError("unable to translate C expr: unexpected token '##'");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:32:9
+// /home/hassan/Workspace/CLionProjects/vizier/zig-pkg/N-V-__8AAHf3AwA3VQ4naHXo8fnw2t7FoJt3RwvLgs6G_Md4/duckdb_capi/duckdb_extension.h:32:9
 pub inline fn DUCKDB_EXTENSION_GLUE(x: anytype, y: anytype) @TypeOf(DUCKDB_EXTENSION_GLUE_HELPER(x, y)) {
     _ = &x;
     _ = &y;
     return DUCKDB_EXTENSION_GLUE_HELPER(x, y);
 }
 pub const DUCKDB_EXTENSION_STR_HELPER = @compileError("unable to translate C expr: unexpected token '#'");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:34:9
+// /home/hassan/Workspace/CLionProjects/vizier/zig-pkg/N-V-__8AAHf3AwA3VQ4naHXo8fnw2t7FoJt3RwvLgs6G_Md4/duckdb_capi/duckdb_extension.h:34:9
 pub inline fn DUCKDB_EXTENSION_STR(x: anytype) @TypeOf(DUCKDB_EXTENSION_STR_HELPER(x)) {
     _ = &x;
     return DUCKDB_EXTENSION_STR_HELPER(x);
@@ -1910,13 +1910,13 @@ pub const DUCKDB_EXTENSION_API_VERSION_MINOR = @as(c_int, 2);
 pub const DUCKDB_EXTENSION_API_VERSION_PATCH = @as(c_int, 0);
 pub const DUCKDB_EXTENSION_API_VERSION_STRING = DUCKDB_EXTENSION_SEMVER_STRING(DUCKDB_EXTENSION_API_VERSION_MAJOR, DUCKDB_EXTENSION_API_VERSION_MINOR, DUCKDB_EXTENSION_API_VERSION_PATCH);
 pub const DUCKDB_EXTENSION_GLOBAL = @compileError("unable to translate macro: undefined identifier `duckdb_ext_api`");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:971:9
+// /home/hassan/Workspace/CLionProjects/vizier/zig-pkg/N-V-__8AAHf3AwA3VQ4naHXo8fnw2t7FoJt3RwvLgs6G_Md4/duckdb_capi/duckdb_extension.h:971:9
 pub const DUCKDB_EXTENSION_API_INIT = @compileError("unable to translate macro: undefined identifier `res`");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:973:9
+// /home/hassan/Workspace/CLionProjects/vizier/zig-pkg/N-V-__8AAHf3AwA3VQ4naHXo8fnw2t7FoJt3RwvLgs6G_Md4/duckdb_capi/duckdb_extension.h:973:9
 pub const DUCKDB_EXTENSION_EXTERN = @compileError("unable to translate macro: undefined identifier `duckdb_ext_api`");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:981:9
+// /home/hassan/Workspace/CLionProjects/vizier/zig-pkg/N-V-__8AAHf3AwA3VQ4naHXo8fnw2t7FoJt3RwvLgs6G_Md4/duckdb_capi/duckdb_extension.h:981:9
 pub const DUCKDB_CAPI_ENTRY_VISIBILITY = @compileError("unable to translate macro: undefined identifier `visibility`");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:986:9
+// /home/hassan/Workspace/CLionProjects/vizier/zig-pkg/N-V-__8AAHf3AwA3VQ4naHXo8fnw2t7FoJt3RwvLgs6G_Md4/duckdb_capi/duckdb_extension.h:986:9
 pub const DUCKDB_TYPE = enum_DUCKDB_TYPE;
 pub const _duckdb_vector = struct__duckdb_vector;
 pub const _duckdb_instance_cache = struct__duckdb_instance_cache;

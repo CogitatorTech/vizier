@@ -2,7 +2,7 @@
 
 ## Build from Source
 
-Vizier requires Zig 0.15.2 and a DuckDB binary (version `1.2.0` or newer) for testing.
+Vizier needs Zig 0.16.0 and a DuckDB binary (version 1.2.0 or newer) for testing.
 
 ```bash
 git clone --depth=1 https://github.com/CogitatorTech/vizier.git
