@@ -5,10 +5,27 @@ const build_options = @import("build_options");
 const extension_path = "zig-out/lib/vizier.duckdb_extension";
 var temp_path_counter: std.atomic.Value(u64) = .init(0);
 
+fn tempDir(allocator: std.mem.Allocator) ![]u8 {
+    const candidates = [_][:0]const u8{ "TMPDIR", "TMP", "TEMP" };
+    for (candidates) |name| {
+        if (std.c.getenv(name.ptr)) |c_str| {
+            return allocator.dupe(u8, std.mem.span(c_str));
+        }
+    }
+    return allocator.dupe(u8, switch (@import("builtin").os.tag) {
+        .windows => "C:\\Windows\\Temp",
+        else => "/tmp",
+    });
+}
+
 fn uniqueTempPath(allocator: std.mem.Allocator, suffix: []const u8) ![]u8 {
     const id = temp_path_counter.fetchAdd(1, .monotonic);
     var prng = std.Random.DefaultPrng.init(std.testing.random_seed ^ id);
-    return std.fmt.allocPrint(allocator, "/tmp/vizier-{x}-{d}-{s}", .{ prng.random().int(u64), id, suffix });
+    const dir = try tempDir(allocator);
+    defer allocator.free(dir);
+    const name = try std.fmt.allocPrint(allocator, "vizier-{x}-{d}-{s}", .{ prng.random().int(u64), id, suffix });
+    defer allocator.free(name);
+    return std.fs.path.join(allocator, &.{ dir, name });
 }
 
 /// Run a SQL script in DuckDB with the extension loaded and return stdout.

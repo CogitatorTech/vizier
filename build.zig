@@ -169,6 +169,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("tests/integration_tests.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
     integration_test_module.addImport("build_options", build_options.createModule());
 
