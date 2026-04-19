@@ -86,6 +86,23 @@ static char *escape_sql_ident(const char *src) {
   return escaped;
 }
 
+// Compute inverse SQL for a recommendation's forward SQL.
+// Writes "" to out if the recommendation is irreversible. Current coverage:
+//   "create index <name> on ..." → "drop index <name>"
+// Other kinds (drop index, create table as, copy) have no computable inverse.
+static void compute_inverse_sql(const char *forward_sql, char *out,
+                                size_t out_size) {
+  out[0] = '\0';
+  if (strncmp(forward_sql, "create index ", 13) == 0) {
+    const char *idx_start = forward_sql + 13;
+    const char *idx_end = strstr(idx_start, " on ");
+    if (idx_end) {
+      snprintf(out, out_size, "drop index %.*s",
+               (int)(idx_end - idx_start), idx_start);
+    }
+  }
+}
+
 // FNV-1a hash
 static int64_t fnv1a_hash(const char *str) {
   uint64_t h = 14695981039346656037ULL;
@@ -1180,16 +1197,22 @@ static void apply_all_bind(duckdb_bind_info info) {
         duckdb_query(g_flush_conn, mark_buf, &mark_res);
         duckdb_destroy_result(&mark_res);
 
-        // Log action
+        // Log action with inverse SQL so rollback_all can revert the change
+        char inverse_sql[4096] = "";
+        if (applied)
+          compute_inverse_sql(sql_text, inverse_sql, sizeof(inverse_sql));
         char *escaped = escape_sql_str(sql_text);
+        char *escaped_inv = escape_sql_str(inverse_sql);
         char log_buf[8192];
         snprintf(
             log_buf, sizeof(log_buf),
             "insert into vizier.applied_actions (recommendation_id, sql_text, "
-            "success, notes) values (%lld, '%s', %s, '%s')",
-            (long long)rec_id, escaped, applied ? "true" : "false",
+            "inverse_sql, success, notes) values (%lld, '%s', '%s', %s, '%s')",
+            (long long)rec_id, escaped, escaped_inv,
+            applied ? "true" : "false",
             applied ? "Applied via apply_all" : "Failed via apply_all");
         free(escaped);
+        free(escaped_inv);
         duckdb_result log_res;
         memset(&log_res, 0, sizeof(log_res));
         duckdb_query(g_flush_conn, log_buf, &log_res);
@@ -1790,24 +1813,9 @@ static void apply_bind(duckdb_bind_info info) {
 
           // Generate inverse SQL for rollback
           char inverse_sql[4096] = "";
-          if (applied) {
-            // create index idx_X ... → drop index idx_X
-            if (strncmp(bind_data->sql_text, "create index ", 13) == 0) {
-              // Extract index name: "create index <name> on ..."
-              const char *idx_start = bind_data->sql_text + 13;
-              const char *idx_end = strstr(idx_start, " on ");
-              if (idx_end) {
-                snprintf(inverse_sql, sizeof(inverse_sql), "drop index %.*s",
-                         (int)(idx_end - idx_start), idx_start);
-              }
-            }
-            // drop index X → original sql_text is the inverse (stored in rec)
-            else if (strncmp(bind_data->sql_text, "drop index ", 11) == 0) {
-              // Can't easily invert a drop, leave empty
-            }
-            // create or replace table X as ... → not reversible
-            // copy ... to ... → not reversible
-          }
+          if (applied)
+            compute_inverse_sql(bind_data->sql_text, inverse_sql,
+                                sizeof(inverse_sql));
 
           // Log the action with inverse SQL
           char *escaped = escape_sql_str(bind_data->sql_text);

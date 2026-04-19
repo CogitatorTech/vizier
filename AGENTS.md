@@ -75,6 +75,9 @@ These are hard constraints discovered during development:
   Use explicit casts in SQL queries if needed.
 - `duckdb_query` executes only one statement.** Multi-statement strings silently ignore everything after the first semicolon.
 - `access->get_database(info)` may return a temporary pointer. Heap-copy the `duckdb_database` value if storing it beyond the entry point scope.
+- Check the validity bitmap before reading scalar query results. A NULL cell's `duckdb_string_t` bytes are undefined; calling
+  `duckdb_string_t_length`/`_data` on it reads garbage and is non-deterministic (manifests as test flakiness under a concurrent load). Use
+  `duckdb_vector_get_validity` + `duckdb_validity_row_is_valid` first.
 
 ### Capture / Flush Pattern
 
@@ -136,6 +139,10 @@ Good first tasks:
 - Integration tests live in `tests/integration_tests.zig`. They spawn `duckdb` as a child process, load the extension, run SQL, and assert on the
   output. Add a test here for any new SQL-visible function.
 - No SQL-facing change is complete without an integration test.
+- Integration-test assertions must be uniquely attributable. The harness checks for substrings in CSV output, so `"ok"`, `"1"`, `"2"`, or `"0."`
+  collide with capture status rows, hex signatures, timestamps, and captured SQL literals. Emit a distinctive marker from the final `select`, for
+  example `select 'check_count=' || count(*) from ...`, and assert on `"check_count=2"`. Save bare-substring assertions for values that are already
+  unique (recommendation kinds, reason fragments, specific column names).
 
 ## Change Design Checklist
 
