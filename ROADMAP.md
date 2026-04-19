@@ -44,7 +44,7 @@ This document outlines the features implemented in Vizier and the future goals f
 - [x] Repeated aggregation detection
 - [x] Precomputed rollup table recommendations
 - [x] `CREATE TABLE` and `INSERT` SQL generation
-- [x] Sort both sides of frequent joins by the join key for merge-join compatibility
+- [x] Sorting both sides of frequent joins by the join key for merge-join compatibility
 
 ### Recommendation Engine
 
@@ -113,8 +113,8 @@ Vizier state is in-memory and lost when DuckDB exits. Persistence allows query p
 to accumulate over days and weeks.
 
 - [x] `vizier_init(path)` persistent state file initialization
-- [x] Autoload state on extension init if `state_path` setting is configured
-- [x] Auto-save metadata tables on `vizier_flush()` when `state_path` is configured
+- [x] Autoloading state on extension init if `state_path` setting is configured
+- [x] Auto-saving metadata tables on `vizier_flush()` when `state_path` is configured
 - [x] `vizier_save(path)` and `vizier_load(path)` for state transfer across environments
 - [ ] Attach-based persistence using `ATTACH ':vizier_state:' AS vizier` to a file-backed database
 

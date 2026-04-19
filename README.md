@@ -6,7 +6,7 @@
 [![Benchmarks](https://img.shields.io/github/actions/workflow/status/CogitatorTech/vizier/benchmarks.yml?label=benchmarks&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/actions/workflows/benchmarks.yml)
 [![Docs](https://img.shields.io/badge/docs-read-007ec6?label=docs&style=flat&labelColor=282c34&logo=readthedocs)](https://cogitatortech.github.io/vizier/)
 [![License](https://img.shields.io/badge/license-MIT-007ec6?label=license&style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/CogitatorTech/vizier/blob/main/LICENSE)
-[![Zig Version](https://img.shields.io/badge/Zig-0.15.2-orange?logo=zig&labelColor=282c34)](https://ziglang.org/download/)
+[![Zig](https://img.shields.io/badge/zig-0.16.0-F7A41D?style=flat&labelColor=282c34&logo=zig)](https://ziglang.org/download/)
 [![Release](https://img.shields.io/github/release/CogitatorTech/vizier.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/releases/latest)
 
 A physical design advisor for DuckDB
@@ -61,11 +61,13 @@ See [ROADMAP.md](ROADMAP.md) for the list of implemented and planned features.
 Install Vizier from the hosted DuckDB extension repository:
 
 ```sql
-install vizier from 'https://cogitatortech.github.io/vizier/extensions';
-load vizier;
+install
+vizier from 'https://cogitatortech.github.io/vizier/extensions';
+load
+vizier;
 ```
 
-The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.1`.
+The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.2`.
 
 > [!IMPORTANT]
 > Vizier is currently not available on DuckDB's community extensions repository and is distributed as an unsigned extension.
@@ -106,19 +108,26 @@ make duckdb
 The example below assumes you install Vizier from the hosted extension repository.
 
 ```sql
-install vizier from 'https://cogitatortech.github.io/vizier/extensions';
-load vizier;
+install
+vizier from 'https://cogitatortech.github.io/vizier/extensions';
+load
+vizier;
 
 -- Capture queries from your workload
-select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
-select * from vizier_capture('select count(*) from orders group by customer_id');
-select * from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
+select *
+from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
+select *
+from vizier_capture('select count(*) from orders group by customer_id');
+select *
+from vizier_capture('select * from events where account_id = 42 and ts >= date ''2026-01-01''');
 
 -- Persist captured queries to metadata tables
-select * from vizier_flush();
+select *
+from vizier_flush();
 
 -- View workload summary (ordered by frequency)
-select * from vizier.workload_summary;
+select *
+from vizier.workload_summary;
 ```
 
 Example output:

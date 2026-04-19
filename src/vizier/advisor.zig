@@ -444,24 +444,21 @@ pub const count_recommendations_sql: [*:0]const u8 =
 
 /// SQL template to fetch a recommendation's SQL text by ID.
 pub fn buildFetchRecommendationSql(buf: []u8, rec_id: i64) ?[*:0]const u8 {
-    var fbs = std.io.fixedBufferStream(buf);
-    const w = fbs.writer();
+    var w: std.Io.Writer = .fixed(buf);
     w.print("select sql_text::varchar, kind::varchar, table_name::varchar from vizier.recommendation_store where recommendation_id = {d} and status = 'pending'\x00", .{rec_id}) catch return null;
-    return @ptrCast(fbs.getWritten().ptr);
+    return @ptrCast(w.buffered().ptr);
 }
 
 /// SQL template to mark a recommendation as applied.
 pub fn buildMarkAppliedSql(buf: []u8, rec_id: i64) ?[*:0]const u8 {
-    var fbs = std.io.fixedBufferStream(buf);
-    const w = fbs.writer();
+    var w: std.Io.Writer = .fixed(buf);
     w.print("update vizier.recommendation_store set status = 'applied' where recommendation_id = {d}\x00", .{rec_id}) catch return null;
-    return @ptrCast(fbs.getWritten().ptr);
+    return @ptrCast(w.buffered().ptr);
 }
 
 /// SQL template to log an applied action.
 pub fn buildLogActionSql(buf: []u8, rec_id: i64, sql_text: []const u8, success: bool) ?[*:0]const u8 {
-    var fbs = std.io.fixedBufferStream(buf);
-    const w = fbs.writer();
+    var w: std.Io.Writer = .fixed(buf);
     w.print("insert into vizier.applied_actions (recommendation_id, sql_text, success, notes) values ({d}, '", .{rec_id}) catch return null;
     // Escape single quotes
     for (sql_text) |c| {
@@ -475,7 +472,7 @@ pub fn buildLogActionSql(buf: []u8, rec_id: i64, sql_text: []const u8, success: 
         if (success) "true" else "false",
         if (success) "Applied successfully" else "Apply failed",
     }) catch return null;
-    return @ptrCast(fbs.getWritten().ptr);
+    return @ptrCast(w.buffered().ptr);
 }
 
 test "buildFetchRecommendationSql" {

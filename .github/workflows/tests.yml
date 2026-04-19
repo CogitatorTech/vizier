@@ -1,12 +1,14 @@
 name: Run Tests
 
 on:
-  workflow_call:
   workflow_dispatch:
+  workflow_call:
   push:
     branches:
       - main
       - develop
+    tags:
+      - 'v*'
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -17,36 +19,95 @@ on:
       - '**.md'
       - 'docs/**'
 
+#concurrency:
+#  group: ${{ github.workflow }}-${{ github.ref }}
+#  cancel-in-progress: true
+
 permissions:
   contents: read
 
+env:
+  ZIG_VERSION: 0.16.0
+  DUCKDB_VERSION: v1.5.2
+
 jobs:
-  tests:
-    runs-on: ubuntu-latest
+  native-tests:
+    name: Native Tests (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux AMD64
+            os: ubuntu-latest
+            platform: linux_amd64
+            duckdb_asset: duckdb_cli-linux-amd64.zip
+            duckdb_exec: ./duckdb
+          - name: macOS ARM64
+            os: macos-14
+            platform: osx_arm64
+            duckdb_asset: duckdb_cli-osx-universal.zip
+            duckdb_exec: ./duckdb
+          - name: Windows AMD64
+            os: windows-latest
+            platform: windows_amd64
+            duckdb_asset: duckdb_cli-windows-amd64.zip
+            duckdb_exec: ./duckdb.exe
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Zig
+      - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: '0.15.2'
+          version: ${{ env.ZIG_VERSION }}
 
-      - name: Install Dependencies
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Build Dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y make
+          sudo apt-get install -y unzip
 
-      - name: Install DuckDB CLI
+      - name: Download DuckDB CLI
+        shell: bash
         run: |
-          wget -q https://github.com/duckdb/duckdb/releases/download/v1.5.1/duckdb_cli-linux-amd64.zip
-          unzip -q duckdb_cli-linux-amd64.zip
-          chmod +x duckdb
-          sudo mv duckdb /usr/local/bin/
+          curl -L -o duckdb.zip "https://github.com/duckdb/duckdb/releases/download/${{ env.DUCKDB_VERSION }}/${{ matrix.duckdb_asset }}"
+          unzip -q duckdb.zip
+          chmod +x duckdb 2>/dev/null || true
 
       - name: Run Unit, Property, and Integration Tests
-        run: make test
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            DUCKDB_PATH="$(pwd -W)/duckdb.exe"
+          else
+            DUCKDB_PATH="$PWD/duckdb"
+          fi
+
+          zig build test \
+            -Dextension-name=vizier \
+            -Dapi-version=v1.2.0 \
+            -Dplatform=${{ matrix.platform }} \
+            -Dduckdb-path="$DUCKDB_PATH" \
+            --summary all
 
       - name: Run SQL Tests
-        run: make test-sql
+        shell: bash
+        run: |
+          fail=0
+          for f in tests/sql/*.sql; do
+            name=$(basename "$f")
+            if ${{ matrix.duckdb_exec }} -unsigned -c ".read $f" > /dev/null 2>&1; then
+              printf "  %-40s PASS\n" "$name"
+            else
+              printf "  %-40s FAIL\n" "$name"
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] && echo "All SQL tests passed." || (echo "Some SQL tests failed." && exit 1)

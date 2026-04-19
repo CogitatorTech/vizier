@@ -36,7 +36,7 @@ jobs:
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: '0.15.2'
+          version: '0.16.0'
 
       - name: Install Dependencies
         run: |
@@ -45,7 +45,7 @@ jobs:
 
       - name: Install DuckDB CLI
         run: |
-          wget -q https://github.com/duckdb/duckdb/releases/download/v1.5.1/duckdb_cli-linux-amd64.zip
+          wget -q https://github.com/duckdb/duckdb/releases/download/v1.5.2/duckdb_cli-linux-amd64.zip
           unzip -q duckdb_cli-linux-amd64.zip
           chmod +x duckdb
           sudo mv duckdb /usr/local/bin/

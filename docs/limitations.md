@@ -3,7 +3,7 @@
 Vizier is in early development. This page documents known limitations, so you can decide whether Vizier fits your use case and interpret
 its recommendations accordingly.
 
-## Query Capture Is Manual
+## Query Capture is Manual
 
 Vizier needs you to explicitly capture queries via `vizier_capture()`, `vizier_capture_bulk()`, or session capture.
 There is no automatic capture that transparently records all queries as they run.
@@ -36,7 +36,7 @@ Queries that exceed these limits are silently truncated.
 For best results, create the tables in your database before capturing and flushing queries so that
 EXPLAIN-based extraction can run.
 
-## Scoring Is Partially Cost-Aware
+## Scoring is Partially Cost-Aware
 
 Recommendations are scored using query frequency, predicate counts, and hand-tuned thresholds.
 When EXPLAIN-based extraction succeeds, the estimated row count from the query plan is factored

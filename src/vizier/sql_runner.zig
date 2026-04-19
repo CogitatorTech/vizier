@@ -42,6 +42,8 @@ pub fn queryFirstVarchar(conn: duckdb.duckdb_connection, sql: [*:0]const u8, col
     if (row_count == 0) return null;
 
     const vector = duckdb_ext_api.duckdb_data_chunk_get_vector.?(chunk, col);
+    const validity = duckdb_ext_api.duckdb_vector_get_validity.?(vector);
+    if (validity != null and !duckdb_ext_api.duckdb_validity_row_is_valid.?(validity, 0)) return null;
     const raw_data = duckdb_ext_api.duckdb_vector_get_data.?(vector) orelse return null;
     const strings: [*]duckdb.duckdb_string_t = @ptrCast(@alignCast(raw_data));
 

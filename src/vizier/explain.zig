@@ -244,14 +244,14 @@ fn extractColumnFromFilter(line: []const u8) []const u8 {
     for (line, 0..) |c, i| {
         if (c == '=' or c == '>' or c == '<' or c == '!') {
             if (i == 0) return "";
-            return std.mem.trimRight(u8, line[0..i], " ");
+            return std.mem.trimEnd(u8, line[0..i], " ");
         }
     }
 
     // Check for LIKE, IN, BETWEEN (keyword operators)
-    if (std.mem.indexOf(u8, line, " LIKE ")) |i| return std.mem.trimRight(u8, line[0..i], " ");
-    if (std.mem.indexOf(u8, line, " IN ")) |i| return std.mem.trimRight(u8, line[0..i], " ");
-    if (std.mem.indexOf(u8, line, " BETWEEN ")) |i| return std.mem.trimRight(u8, line[0..i], " ");
+    if (std.mem.indexOf(u8, line, " LIKE ")) |i| return std.mem.trimEnd(u8, line[0..i], " ");
+    if (std.mem.indexOf(u8, line, " IN ")) |i| return std.mem.trimEnd(u8, line[0..i], " ");
+    if (std.mem.indexOf(u8, line, " BETWEEN ")) |i| return std.mem.trimEnd(u8, line[0..i], " ");
 
     return "";
 }

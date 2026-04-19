@@ -63,7 +63,7 @@ Vizier is less useful for:
 - Tiny datasets (DuckDB is already fast).
 - Read-only Parquet scans like reading Parquet files on an S3 bucket.
 
-## What Vizier Is Not
+## What Vizier is Not
 
 Vizier is not an auto-tuner.
 It does not rewrite your tables for you.

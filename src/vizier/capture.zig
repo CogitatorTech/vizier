@@ -36,8 +36,7 @@ pub fn captureQuery(db: duckdb.duckdb_database, sql_text: [*:0]const u8) Capture
 /// Build the INSERT SQL with escaped quotes. Returns a sentinel-terminated slice or null on overflow.
 fn buildInsertSql(buf: []u8, hash: i64, sql_text: []const u8) ?[*:0]const u8 {
     // We'll write the SQL manually to handle escaping
-    var fbs = std.io.fixedBufferStream(buf);
-    const writer = fbs.writer();
+    var writer: std.Io.Writer = .fixed(buf);
 
     writer.print(
         "insert into vizier.workload_queries (query_signature, normalized_sql, sample_sql) values ({d}, '",
@@ -72,7 +71,7 @@ fn buildInsertSql(buf: []u8, hash: i64, sql_text: []const u8) ?[*:0]const u8 {
     // Null-terminate
     writer.writeByte(0) catch return null;
 
-    const written = fbs.getWritten();
+    const written = writer.buffered();
     // Return a pointer to the sentinel-terminated string
     return @ptrCast(written.ptr);
 }

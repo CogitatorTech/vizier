@@ -1,7 +1,8 @@
 # ################################################################################
 # # Configuration and Variables
 # ################################################################################
-ZIG    ?= $(shell which zig || echo ~/.local/share/zig/0.15.2/zig)
+ZIG_LOCAL  := $(HOME)/.local/share/zig/0.16.0/zig
+ZIG        ?= $(shell test -x $(ZIG_LOCAL) && echo $(ZIG_LOCAL) || which zig)
 BUILD_TYPE    ?= Debug
 JOBS          ?= $(shell nproc || echo 2)
 SRC_DIR       := src
@@ -91,7 +92,7 @@ test-sql: build-all  ## Run standalone SQL tests (needs DuckDB)
 	@fail=0; \
 	for f in tests/sql/*.sql; do \
 		name=$$(basename "$$f"); \
-		if duckdb -unsigned -c ".read $$f" > /dev/null 2>&1; then \
+		if duckdb -unsigned -c ".read \"$$f\"" > /dev/null 2>&1; then \
 			printf "  %-40s PASS\n" "$$name"; \
 		else \
 			printf "  %-40s FAIL\n" "$$name"; \
@@ -156,7 +157,7 @@ install-deps: ## Install system dependencies (for Debian-based systems)
 	@echo "Installing system dependencies..."
 	@sudo apt-get update
 	@sudo apt-get install -y build-essential python3 python3-pip clang-format
-	@echo "Note: Install zig separately or use the version in ~/.local/share/zig/0.15.1/"
+	@echo "Note: Install zig separately or use the version in ~/.local/share/zig/0.16.0/"
 
 .PHONY: build-multi-version
 build-multi-version: ## Build extension (works with DuckDB v1.2.0 and later)

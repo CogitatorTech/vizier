@@ -537,8 +537,7 @@ pub fn normalizeSql(sql: []const u8, buf: []u8) []const u8 {
     const tok_result = tokenize(sql);
     const tokens = tok_result.tokens[0..tok_result.count];
 
-    var fbs = std.io.fixedBufferStream(buf);
-    const w = fbs.writer();
+    var w: std.Io.Writer = .fixed(buf);
 
     for (tokens, 0..) |tok, i| {
         if (tok.kind == .eof) break;
@@ -548,23 +547,23 @@ pub fn normalizeSql(sql: []const u8, buf: []u8) []const u8 {
             tok.kind != .rparen and tokens[i - 1].kind != .lparen and
             tokens[i - 1].kind != .dot)
         {
-            w.writeByte(' ') catch return fbs.getWritten();
+            w.writeByte(' ') catch return w.buffered();
         }
 
         switch (tok.kind) {
-            .string_lit => w.writeByte('?') catch return fbs.getWritten(),
-            .number => w.writeByte('?') catch return fbs.getWritten(),
+            .string_lit => w.writeByte('?') catch return w.buffered(),
+            .number => w.writeByte('?') catch return w.buffered(),
             .keyword => {
                 // Lowercase keywords for consistency
                 for (tok.text) |c| {
-                    w.writeByte(std.ascii.toLower(c)) catch return fbs.getWritten();
+                    w.writeByte(std.ascii.toLower(c)) catch return w.buffered();
                 }
             },
-            else => w.writeAll(tok.text) catch return fbs.getWritten(),
+            else => w.writeAll(tok.text) catch return w.buffered(),
         }
     }
 
-    return fbs.getWritten();
+    return w.buffered();
 }
 
 // ============================================================================
@@ -572,20 +571,18 @@ pub fn normalizeSql(sql: []const u8, buf: []u8) []const u8 {
 // ============================================================================
 
 pub fn buildTablesJson(result: *const ExtractionResult, buf: []u8) []const u8 {
-    var fbs = std.io.fixedBufferStream(buf);
-    const w = fbs.writer();
+    var w: std.Io.Writer = .fixed(buf);
     w.writeByte('[') catch return "[]";
     for (result.tableSlice(), 0..) |t, idx| {
         if (idx > 0) w.writeByte(',') catch return "[]";
         w.print("\"{s}\"", .{t.name}) catch return "[]";
     }
     w.writeByte(']') catch return "[]";
-    return fbs.getWritten();
+    return w.buffered();
 }
 
 pub fn buildColumnsJson(result: *const ExtractionResult, buf: []u8) []const u8 {
-    var fbs = std.io.fixedBufferStream(buf);
-    const w = fbs.writer();
+    var w: std.Io.Writer = .fixed(buf);
     w.writeByte('[') catch return "[]";
     var written: usize = 0;
     for (result.predicateSlice()) |p| {
@@ -596,7 +593,7 @@ pub fn buildColumnsJson(result: *const ExtractionResult, buf: []u8) []const u8 {
         written += 1;
     }
     w.writeByte(']') catch return "[]";
-    return fbs.getWritten();
+    return w.buffered();
 }
 
 // ============================================================================
@@ -832,13 +829,12 @@ test "deeply nested parentheses do not crash" {
 test "very long SQL does not crash" {
     // Build a query longer than MAX_TOKENS worth of tokens
     var buf: [8192]u8 = undefined;
-    var fbs = std.io.fixedBufferStream(&buf);
-    const w = fbs.writer();
+    var w: std.Io.Writer = .fixed(&buf);
     w.writeAll("select * from t where a = 1") catch unreachable;
     for (0..200) |_| {
         w.writeAll(" and b = 1") catch break;
     }
-    const sql = fbs.getWritten();
+    const sql = w.buffered();
     const result = extractFromSql(sql);
     // Should not crash; may truncate predicates at MAX_PREDICATES
     try std.testing.expect(result.table_count >= 1);

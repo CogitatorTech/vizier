@@ -21,6 +21,16 @@ Priorities, in order:
 - Add comments only when they clarify non-obvious behavior.
 - Do not add features, error handling, or abstractions beyond what is needed for the current task.
 
+## Writing Style
+
+- Use Oxford commas in inline lists: "a, b, and c" not "a, b, c".
+- Do not use em dashes. Restructure the sentence, or use a colon or semicolon instead.
+- Avoid colorful adjectives and adverbs. Write "TCP proxy" not "lightweight TCP proxy", "scoring components" not "transparent scoring components".
+- Use noun phrases for checklist items, not imperative verbs. Write "redundant index detection" not "detect redundant indexes".
+- SQL keywords in prose should be backticked: `` `JOIN` ``, `` `EXPLAIN` ``, `` `CREATE INDEX` ``.
+- Headings in Markdown files must be in the title case: "Build from Source" not "Build from source". Minor words (a, an, the, and, but, or, for, in,
+  on, at, to, by, of, is, are, was, were, be) stay lowercase unless they are the first word.
+
 ## Repository Layout
 
 - `src/extension.c`: C entry point, DuckDB function registration, capture/flush logic. Uses `add_pending_capture()` helper for all capture
@@ -65,6 +75,9 @@ These are hard constraints discovered during development:
   Use explicit casts in SQL queries if needed.
 - `duckdb_query` executes only one statement.** Multi-statement strings silently ignore everything after the first semicolon.
 - `access->get_database(info)` may return a temporary pointer. Heap-copy the `duckdb_database` value if storing it beyond the entry point scope.
+- Check the validity bitmap before reading scalar query results. A NULL cell's `duckdb_string_t` bytes are undefined; calling
+  `duckdb_string_t_length`/`_data` on it reads garbage and is non-deterministic (manifests as test flakiness under a concurrent load). Use
+  `duckdb_vector_get_validity` + `duckdb_validity_row_is_valid` first.
 
 ### Capture / Flush Pattern
 
@@ -88,16 +101,6 @@ Multiple capture methods feed into the same `g_pending` buffer:
 - C formatting is handled by `clang-format`; Zig formatting by `zig fmt`.
 - SQL keywords must be lowercase. Write `select`, `from`, `where`, `create table`, not `SELECT`, `FROM`, `WHERE`, `CREATE TABLE`. This applies to all
   SQL strings in Zig modules, C source, and generated recommendation SQL.
-
-## Writing Style
-
-- Use Oxford commas in inline lists: "a, b, and c" not "a, b, c".
-- Do not use em dashes. Restructure the sentence, or use a colon or semicolon instead.
-- Avoid colorful adjectives and adverbs. Write "TCP proxy" not "lightweight TCP proxy", "scoring components" not "transparent scoring components".
-- Use noun phrases for checklist items, not imperative verbs. Write "redundant index detection" not "detect redundant indexes".
-- SQL keywords in prose should be backticked: `` `JOIN` ``, `` `EXPLAIN` ``, `` `CREATE INDEX` ``.
-- Headings in Markdown files must be in the title case: "Build from Source" not "Build from source". Minor words (a, an, the, and, but, or, for, in, on,
-  at, to, by, of) stay lowercase unless they are the first word.
 
 ## Required Validation
 
@@ -136,6 +139,10 @@ Good first tasks:
 - Integration tests live in `tests/integration_tests.zig`. They spawn `duckdb` as a child process, load the extension, run SQL, and assert on the
   output. Add a test here for any new SQL-visible function.
 - No SQL-facing change is complete without an integration test.
+- Integration-test assertions must be uniquely attributable. The harness checks for substrings in CSV output, so `"ok"`, `"1"`, `"2"`, or `"0."`
+  collide with capture status rows, hex signatures, timestamps, and captured SQL literals. Emit a distinctive marker from the final `select`, for
+  example `select 'check_count=' || count(*) from ...`, and assert on `"check_count=2"`. Save bare-substring assertions for values that are already
+  unique (recommendation kinds, reason fragments, specific column names).
 
 ## Change Design Checklist
 
@@ -156,7 +163,7 @@ Before submitting:
 - PR descriptions should include:
     1. Behavioral change summary.
     2. Tests added/updated.
-    3. Interactive verification done (yes/no).
+    3. Interactive verification is done (yes/no).
     4. Docs updated (yes/no).
 
 Suggested PR checklist:

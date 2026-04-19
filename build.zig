@@ -29,6 +29,9 @@ pub fn build(b: *std.Build) void {
     // Build options passed to library code
     const build_options = b.addOptions();
     build_options.addOption([]const u8, "version", zon_version);
+    const duckdb_path = b.option([]const u8, "duckdb-path", "Path to the DuckDB CLI executable") orelse
+        (b.findProgram(&.{"duckdb"}, &.{}) catch "");
+    build_options.addOption([]const u8, "duckdb_path", duckdb_path);
 
     const root_module = b.createModule(.{
         .root_source_file = b.path("src/lib.zig"),
@@ -48,16 +51,16 @@ pub fn build(b: *std.Build) void {
     lib.install_name = extension_filename;
 
     // Add the C source file that handles DuckDB API integration
-    lib.addCSourceFile(.{
+    lib.root_module.addCSourceFile(.{
         .file = b.path("src/extension.c"),
         .flags = &.{"-std=c11"},
     });
 
     // Add include path for DuckDB headers (from build.zig.zon dependency)
-    lib.addIncludePath(ext_template_capi_path);
+    lib.root_module.addIncludePath(ext_template_capi_path);
 
     // Link libc (required for C code)
-    lib.linkLibC();
+    lib.root_module.linkSystemLibrary("c", .{});
 
     // Add C macro for extension name
     lib.root_module.addCMacro("DUCKDB_EXTENSION_NAME", extension_name);
@@ -166,7 +169,9 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("tests/integration_tests.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
+    integration_test_module.addImport("build_options", build_options.createModule());
 
     const integration_tests = b.addTest(.{
         .root_module = integration_test_module,
@@ -201,7 +206,10 @@ pub fn build(b: *std.Build) void {
     const gen_bindings_step = b.step("duckdb-translate", "Generate Zig bindings from DuckDB C API");
     const capi_dir = ext_template_capi_path.getPath(b);
     const ext_header = ext_template_dep.path("duckdb_capi/duckdb_extension.h").getPath(b);
-    const translate_shell = b.fmt("zig translate-c -I {s} {s} > src/duckdb.zig", .{ capi_dir, ext_header });
+    // Pipe through sed to strip machine-specific source-location comments
+    // (lines like `// /abs/path/foo.h:123:4`) that translate-c emits, so
+    // src/duckdb.zig does not churn per user on regeneration.
+    const translate_shell = b.fmt("zig translate-c -I {s} {s} | sed '/^\\/\\/ \\/.*\\.h:[0-9][0-9]*:[0-9][0-9]*$/d' > src/duckdb.zig", .{ capi_dir, ext_header });
     const translate_cmd = b.addSystemCommand(&[_][]const u8{
         "sh",
         "-c",
@@ -260,7 +268,7 @@ fn getLibFilename(b: *std.Build, target: std.Build.ResolvedTarget, extension_nam
     const lib_extension = getLibExtension(target);
     const os_tag = target.result.os.tag;
 
-    // Note: Windows DLLs don't use "lib" prefix, but other platforms do
+    // Note: Windows DLLs don't use "lib" prefix, but other platforms usually do
     if (os_tag == .windows) {
         return b.fmt("{s}{s}", .{ extension_name, lib_extension });
     } else {

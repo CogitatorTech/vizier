@@ -1740,19 +1740,16 @@ pub const __uint_least8_t = u64;
 pub const __uint32_t_defined = "";
 pub const __int8_t_defined = "";
 pub const __stdint_join3 = @compileError("unable to translate C expr: unexpected token '##'");
-// /home/hassan/.local/share/zig/0.15.1/lib/include/stdint.h:291:9
 pub const __intptr_t_defined = "";
 pub const _INTPTR_T = "";
 pub const _UINTPTR_T = "";
 pub const __int_c_join = @compileError("unable to translate C expr: unexpected token '##'");
-// /home/hassan/.local/share/zig/0.15.1/lib/include/stdint.h:328:9
 pub inline fn __int_c(v: anytype, suffix: anytype) @TypeOf(__int_c_join(v, suffix)) {
     _ = &v;
     _ = &suffix;
     return __int_c_join(v, suffix);
 }
 pub const __uint_c = @compileError("unable to translate macro: undefined identifier `U`");
-// /home/hassan/.local/share/zig/0.15.1/lib/include/stdint.h:330:9
 pub const __int64_c_suffix = __INT64_C_SUFFIX__;
 pub const __int32_c_suffix = __INT64_C_SUFFIX__;
 pub const __int16_c_suffix = __INT64_C_SUFFIX__;
@@ -1838,15 +1835,10 @@ pub const INT_FAST8_MIN = __INT_LEAST8_MIN;
 pub const INT_FAST8_MAX = __INT_LEAST8_MAX;
 pub const UINT_FAST8_MAX = __UINT_LEAST8_MAX;
 pub const __INTN_MIN = @compileError("unable to translate macro: undefined identifier `INT`");
-// /home/hassan/.local/share/zig/0.15.1/lib/include/stdint.h:875:10
 pub const __INTN_MAX = @compileError("unable to translate macro: undefined identifier `INT`");
-// /home/hassan/.local/share/zig/0.15.1/lib/include/stdint.h:876:10
 pub const __UINTN_MAX = @compileError("unable to translate macro: undefined identifier `UINT`");
-// /home/hassan/.local/share/zig/0.15.1/lib/include/stdint.h:877:9
 pub const __INTN_C = @compileError("unable to translate macro: undefined identifier `INT`");
-// /home/hassan/.local/share/zig/0.15.1/lib/include/stdint.h:878:10
 pub const __UINTN_C = @compileError("unable to translate macro: undefined identifier `UINT`");
-// /home/hassan/.local/share/zig/0.15.1/lib/include/stdint.h:879:9
 pub const INTPTR_MIN = -__INTPTR_MAX__ - @as(c_int, 1);
 pub const INTPTR_MAX = __INTPTR_MAX__;
 pub const UINTPTR_MAX = __UINTPTR_MAX__;
@@ -1883,18 +1875,15 @@ pub const _WCHAR_T = "";
 pub const NULL = @import("std").zig.c_translation.cast(?*anyopaque, @as(c_int, 0));
 pub const __CLANG_MAX_ALIGN_T_DEFINED = "";
 pub const offsetof = @compileError("unable to translate C expr: unexpected token 'an identifier'");
-// /home/hassan/.local/share/zig/0.15.1/lib/include/__stddef_offsetof.h:16:9
 pub const DUCKDB_EXTENSION_EXTERN_C_GUARD_OPEN = "";
 pub const DUCKDB_EXTENSION_EXTERN_C_GUARD_CLOSE = "";
 pub const DUCKDB_EXTENSION_GLUE_HELPER = @compileError("unable to translate C expr: unexpected token '##'");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:32:9
 pub inline fn DUCKDB_EXTENSION_GLUE(x: anytype, y: anytype) @TypeOf(DUCKDB_EXTENSION_GLUE_HELPER(x, y)) {
     _ = &x;
     _ = &y;
     return DUCKDB_EXTENSION_GLUE_HELPER(x, y);
 }
 pub const DUCKDB_EXTENSION_STR_HELPER = @compileError("unable to translate C expr: unexpected token '#'");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:34:9
 pub inline fn DUCKDB_EXTENSION_STR(x: anytype) @TypeOf(DUCKDB_EXTENSION_STR_HELPER(x)) {
     _ = &x;
     return DUCKDB_EXTENSION_STR_HELPER(x);
@@ -1910,13 +1899,9 @@ pub const DUCKDB_EXTENSION_API_VERSION_MINOR = @as(c_int, 2);
 pub const DUCKDB_EXTENSION_API_VERSION_PATCH = @as(c_int, 0);
 pub const DUCKDB_EXTENSION_API_VERSION_STRING = DUCKDB_EXTENSION_SEMVER_STRING(DUCKDB_EXTENSION_API_VERSION_MAJOR, DUCKDB_EXTENSION_API_VERSION_MINOR, DUCKDB_EXTENSION_API_VERSION_PATCH);
 pub const DUCKDB_EXTENSION_GLOBAL = @compileError("unable to translate macro: undefined identifier `duckdb_ext_api`");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:971:9
 pub const DUCKDB_EXTENSION_API_INIT = @compileError("unable to translate macro: undefined identifier `res`");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:973:9
 pub const DUCKDB_EXTENSION_EXTERN = @compileError("unable to translate macro: undefined identifier `duckdb_ext_api`");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:981:9
 pub const DUCKDB_CAPI_ENTRY_VISIBILITY = @compileError("unable to translate macro: undefined identifier `visibility`");
-// external/extension-template-c/duckdb_capi/duckdb_extension.h:986:9
 pub const DUCKDB_TYPE = enum_DUCKDB_TYPE;
 pub const _duckdb_vector = struct__duckdb_vector;
 pub const _duckdb_instance_cache = struct__duckdb_instance_cache;
