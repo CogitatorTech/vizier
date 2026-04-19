@@ -28,6 +28,7 @@ fn runSql(allocator: std.mem.Allocator, sql: []const u8) ![]const u8 {
     defer std.heap.page_allocator.free(result.stdout);
 
     if (result.term != .exited or result.term.exited != 0) {
+        std.debug.print("\n--- DuckDB failed ---\nSQL:\n{s}\n--- stdout ---\n{s}\n--- stderr ---\n{s}\n---\n", .{ full_sql, result.stdout, result.stderr });
         return error.DuckDBFailed;
     }
 
@@ -172,6 +173,21 @@ test "capture_bulk reads queries from a table" {
     try expectContains(out, "3");
     // 2 distinct queries after normalization (orders id=1 and id=2 are same pattern)
     try expectContains(out, "2");
+}
+
+test "capture_bulk escapes double quotes in identifiers" {
+    // Regression test: table/column names passed to vizier_capture_bulk must have
+    // embedded double quotes doubled when wrapped in "..." identifier quoting.
+    const out = try runSql(testing.allocator,
+        \\create table "weird""name" ("my""col" varchar);
+        \\insert into "weird""name" values ('select * from x where y = 1');
+        \\select * from vizier_capture_bulk('weird"name', 'my"col');
+        \\select * from vizier_flush();
+        \\select count(*) from vizier.workload_queries;
+    );
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+    try expectContains(out, "1");
 }
 
 test "inspect_table shows column info with predicate counts" {
@@ -839,6 +855,51 @@ test "save and load persist state across sessions" {
     const out2 = try runSql(testing.allocator, load_sql);
     defer testing.allocator.free(out2);
     try expectContains(out2, "ok");
+    try expectContains(out2, "1");
+}
+
+test "vizier_init on fresh path sets state_path and reports no existing state" {
+    const state_path = try uniqueTempPath(testing.allocator, "init-fresh.db");
+    defer testing.allocator.free(state_path);
+
+    const sql = try std.fmt.allocPrint(testing.allocator,
+        \\select * from vizier_init('{s}');
+        \\select value from vizier.settings where key = 'state_path';
+    , .{state_path});
+    defer testing.allocator.free(sql);
+
+    const out = try runSql(testing.allocator, sql);
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+    try expectContains(out, "Initialized (no existing state)");
+    try expectContains(out, state_path);
+}
+
+test "vizier_init loads state from existing file" {
+    const state_path = try uniqueTempPath(testing.allocator, "init-load.db");
+    defer testing.allocator.free(state_path);
+
+    const save_sql = try std.fmt.allocPrint(testing.allocator,
+        \\select * from vizier_capture('select * from init_load_t where x = 1');
+        \\select * from vizier_flush();
+        \\select * from vizier_save('{s}');
+    , .{state_path});
+    defer testing.allocator.free(save_sql);
+
+    const out = try runSql(testing.allocator, save_sql);
+    defer testing.allocator.free(out);
+    try expectContains(out, "ok");
+
+    const init_sql = try std.fmt.allocPrint(testing.allocator,
+        \\select * from vizier_init('{s}');
+        \\select count(*) from vizier.workload_queries;
+    , .{state_path});
+    defer testing.allocator.free(init_sql);
+
+    const out2 = try runSql(testing.allocator, init_sql);
+    defer testing.allocator.free(out2);
+    try expectContains(out2, "ok");
+    try expectContains(out2, "State loaded from file");
     try expectContains(out2, "1");
 }
 

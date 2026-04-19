@@ -158,7 +158,7 @@ pub export fn zig_extract_and_store(
     const tables_json = extract.buildTablesJson(&result, &tables_buf);
     const columns_json = extract.buildColumnsJson(&result, &cols_buf);
 
-    var upd_buf: [4096]u8 = undefined;
+    var upd_buf: [8192]u8 = undefined;
     const upd_sql = std.fmt.bufPrint(&upd_buf, "update vizier.workload_queries set tables_json = '{s}', columns_json = '{s}', estimated_rows = {d} where query_signature = '{s}'\x00", .{
         tables_json,
         columns_json,

@@ -69,6 +69,23 @@ static char *escape_sql_str(const char *src) {
   return escaped;
 }
 
+// Escape double quotes for SQL identifier embedding (between "...")
+static char *escape_sql_ident(const char *src) {
+  size_t len = strlen(src);
+  char *escaped = (char *)malloc(len * 2 + 1);
+  char *dst = escaped;
+  for (const char *p = src; *p; p++) {
+    if (*p == '"') {
+      *dst++ = '"';
+      *dst++ = '"';
+    } else {
+      *dst++ = *p;
+    }
+  }
+  *dst = '\0';
+  return escaped;
+}
+
 // FNV-1a hash
 static int64_t fnv1a_hash(const char *str) {
   uint64_t h = 14695981039346656037ULL;
@@ -275,7 +292,7 @@ static void vizier_configure_func(duckdb_function_info info,
       char *esc_key = escape_sql_str(kbuf);
       char *esc_val = escape_sql_str(vbuf);
 
-      char buf[1024];
+      char buf[2048];
       snprintf(buf, sizeof(buf),
                "update vizier.settings set value = '%s' where key = '%s'",
                esc_val, esc_key);
@@ -662,8 +679,10 @@ static void capture_query_bind(duckdb_bind_info info) {
 
   CaptureBindData *bind_data =
       (CaptureBindData *)malloc(sizeof(CaptureBindData));
-  bind_data->success =
-      add_pending_capture(sql_text, bind_data->query_signature);
+  memset(bind_data, 0, sizeof(*bind_data));
+  if (sql_text)
+    bind_data->success =
+        add_pending_capture(sql_text, bind_data->query_signature);
 
   duckdb_free(sql_text);
   duckdb_bind_set_bind_data(info, bind_data, free);
@@ -1601,9 +1620,13 @@ static void bulk_capture_bind(duckdb_bind_info info) {
 
   if (g_flush_conn && table_name && column_name) {
     // Query all SQL from the source table
-    char query_buf[512];
+    char *esc_col = escape_sql_ident(column_name);
+    char *esc_tbl = escape_sql_ident(table_name);
+    char query_buf[2048];
     snprintf(query_buf, sizeof(query_buf), "select \"%s\"::varchar from \"%s\"",
-             column_name, table_name);
+             esc_col, esc_tbl);
+    free(esc_col);
+    free(esc_tbl);
 
     duckdb_result result;
     memset(&result, 0, sizeof(result));
