@@ -2,6 +2,8 @@ name: Run Tests
 
 on:
   workflow_dispatch:
+  schedule: # Run every day at midnight (UTC)
+    - cron: '0 0 * * *'
   workflow_call:
   push:
     branches:
@@ -19,20 +21,16 @@ on:
       - '**.md'
       - 'docs/**'
 
-#concurrency:
-#  group: ${{ github.workflow }}-${{ github.ref }}
-#  cancel-in-progress: true
-
 permissions:
   contents: read
 
 env:
   ZIG_VERSION: 0.16.0
-  DUCKDB_VERSION: v1.5.2
+  DUCKDB_VERSION: v1.5.3
 
 jobs:
   native-tests:
-    name: Native Tests (${{ matrix.name }})
+    name: Native tests (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -55,7 +53,7 @@ jobs:
             duckdb_exec: ./duckdb.exe
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Zig
@@ -68,7 +66,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Build Dependencies
+      - name: Install build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -81,7 +79,7 @@ jobs:
           unzip -q duckdb.zip
           chmod +x duckdb 2>/dev/null || true
 
-      - name: Run Unit, Property, and Integration Tests
+      - name: Run unit, property, and integration tests
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
@@ -97,7 +95,7 @@ jobs:
             -Dduckdb-path="$DUCKDB_PATH" \
             --summary all
 
-      - name: Run SQL Tests
+      - name: Run SQL tests
         shell: bash
         run: |
           fail=0
