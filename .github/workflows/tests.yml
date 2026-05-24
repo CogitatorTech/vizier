@@ -28,7 +28,7 @@ permissions:
 
 env:
   ZIG_VERSION: 0.16.0
-  DUCKDB_VERSION: v1.5.2
+  DUCKDB_VERSION: v1.5.3
 
 jobs:
   native-tests:
