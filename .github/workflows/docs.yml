@@ -1,4 +1,4 @@
-name: Publish Docs and Web
+name: Publish Documentation
 
 on:
   workflow_dispatch:
@@ -8,26 +8,24 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pages: write
   id-token: write
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  build:
+  deploy-docs:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: '0.16.0'
 
       - name: Install system dependencies
         run: |
@@ -38,35 +36,17 @@ jobs:
 
       - name: Generate documentation
         run: |
-          uv sync --all-extras
           source .venv/bin/activate
           make docs
 
-      - name: Build Wasm playground
-        run: zig build wasm
-
-      - name: Assemble site
-        run: |
-          mkdir -p site/api
-          cp web/index.html web/main.js web/style.css logo.svg site/
-          cp zig-out/web/zodd.wasm site/
-          cp -r docs/api/* site/api/
-
-      - name: Configure GitHub pages
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload site artifact
+      - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./site
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub pages
+      - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
