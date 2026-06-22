@@ -37,7 +37,10 @@ jobs:
           uv sync
 
       - name: Generate documentation
-        run: make docs
+        run: |
+          uv sync --all-extras
+          source .venv/bin/activate
+          make docs
 
       - name: Build Wasm playground
         run: zig build wasm
