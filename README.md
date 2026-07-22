@@ -67,7 +67,7 @@ load
 vizier;
 ```
 
-The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.4`.
+The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.5`.
 
 > [!IMPORTANT]
 > Vizier is currently not available on DuckDB's community extensions repository and is distributed as an unsigned extension.
