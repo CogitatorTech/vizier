@@ -61,10 +61,8 @@ See [ROADMAP.md](ROADMAP.md) for the list of implemented and planned features.
 Install Vizier from the hosted DuckDB extension repository:
 
 ```sql
-install
-vizier from 'https://cogitatortech.github.io/vizier/extensions';
-load
-vizier;
+install vizier from 'https://cogitatortech.github.io/vizier/extensions';
+load vizier;
 ```
 
 The hosted repository currently includes binaries for DuckDB `v1.2.0` to `v1.5.5`.
