@@ -89,10 +89,6 @@ temp/
 *.wal
 *.duckdb
 
-# Dependency lock files (optional)
-poetry.lock
-uv.lock
-
 # Additional files and directories to ignore (put below)
 *_output.txt
 public/
