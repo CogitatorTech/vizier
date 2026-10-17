@@ -1,7 +1,7 @@
 # ################################################################################
 # # Configuration and Variables
 # ################################################################################
-ZIG_LOCAL  := $(HOME)/.local/share/zig/0.16.0/zig
+ZIG_LOCAL  := $(HOME)/.local/share/zig/0.17.0/zig
 ZIG        ?= $(shell test -x $(ZIG_LOCAL) && echo $(ZIG_LOCAL) || which zig)
 BUILD_TYPE    ?= Debug
 JOBS          ?= $(shell nproc || echo 2)
@@ -157,7 +157,7 @@ install-deps: ## Install system dependencies (for Debian-based systems)
 	@echo "Installing system dependencies..."
 	@sudo apt-get update
 	@sudo apt-get install -y build-essential python3 python3-pip clang-format
-	@echo "Note: Install zig separately or use the version in ~/.local/share/zig/0.16.0/"
+	@echo "Note: Install zig separately or use the version in ~/.local/share/zig/0.17.0/"
 
 .PHONY: build-multi-version
 build-multi-version: ## Build extension (works with DuckDB v1.2.0 and later)
