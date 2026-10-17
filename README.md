@@ -7,7 +7,7 @@
 [![Docs](https://img.shields.io/badge/docs-read-007ec6?label=docs&style=flat&labelColor=282c34&logo=readthedocs)](https://cogitatortech.github.io/vizier/)
 [![License](https://img.shields.io/badge/license-MIT-007ec6?label=license&style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/CogitatorTech/vizier/blob/main/LICENSE)
 [![Zig](https://img.shields.io/badge/zig-0.17.0-F7A41D?style=flat&labelColor=282c34&logo=zig)](https://ziglang.org/download/)
-[![Release](https://img.shields.io/github/release/CogitatorTech/vizier.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/releases/latest)
+[![Release](https://img.shields.io/github/release/CogitatorTech/vizier.svg?include_prereleases&label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/vizier/releases/latest)
 
 A physical design advisor for DuckDB
 
