@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
     const build_options = b.addOptions();
     build_options.addOption([]const u8, "version", zon_version);
     const duckdb_path = b.option([]const u8, "duckdb-path", "Path to the DuckDB CLI executable") orelse
-        (b.findProgram(&.{"duckdb"}, &.{}) catch "");
+        (b.findProgram(.{ .names = &.{"duckdb"} }) orelse "");
     build_options.addOption([]const u8, "duckdb_path", duckdb_path);
 
     const root_module = b.createModule(.{
@@ -138,9 +138,9 @@ pub fn build(b: *std.Build) void {
     // Windows DLLs go to bin/, other platforms go to lib/
     const os_tag = target.result.os.tag;
     const lib_path = if (os_tag == .windows)
-        b.getInstallPath(.bin, lib_filename)
+        b.graph.path(.install_bin, lib_filename)
     else
-        b.getInstallPath(.lib, lib_filename);
+        b.graph.path(.install_lib, lib_filename);
 
     // Add metadata step - adds DuckDB extension metadata for proper loading (name, version, platform, API version)
     // Note: we will be using DuckDB extension API version (v1.2.0) so the extension will be compatible with DuckDB versions >= 1.2.0
@@ -149,11 +149,15 @@ pub fn build(b: *std.Build) void {
         "python3",
         "scripts/append_extension_metadata.py",
         "-l",
-        lib_path,
+    });
+    metadata_cmd.addFileArg(lib_path);
+    metadata_cmd.addArgs(&[_][]const u8{
         "-n",
         extension_name,
         "-o",
-        b.getInstallPath(.lib, extension_filename),
+    });
+    metadata_cmd.addFileArg(b.graph.path(.install_lib, extension_filename));
+    metadata_cmd.addArgs(&[_][]const u8{
         "-dv",
         extension_api_version,
         "-ev",
@@ -204,17 +208,18 @@ pub fn build(b: *std.Build) void {
 
     // Generate DuckDB Zig bindings from C API
     const gen_bindings_step = b.step("duckdb-translate", "Generate Zig bindings from DuckDB C API");
-    const capi_dir = ext_template_capi_path.getPath(b);
-    const ext_header = ext_template_dep.path("duckdb_capi/duckdb_extension.h").getPath(b);
+    const ext_header = ext_template_dep.path("duckdb_capi/duckdb_extension.h");
     // Pipe through sed to strip machine-specific source-location comments
     // (lines like `// /abs/path/foo.h:123:4`) that translate-c emits, so
     // src/duckdb.zig does not churn per user on regeneration.
-    const translate_shell = b.fmt("zig translate-c -I {s} {s} | sed '/^\\/\\/ \\/.*\\.h:[0-9][0-9]*:[0-9][0-9]*$/d' > src/duckdb.zig", .{ capi_dir, ext_header });
     const translate_cmd = b.addSystemCommand(&[_][]const u8{
         "sh",
         "-c",
-        translate_shell,
+        "zig translate-c -I \"$1\" \"$2\" | sed '/^\\/\\/ \\/.*\\.h:[0-9][0-9]*:[0-9][0-9]*$/d' > src/duckdb.zig",
+        "sh",
     });
+    translate_cmd.addDirectoryArg2(ext_template_capi_path, .{});
+    translate_cmd.addFileArg(ext_header);
     gen_bindings_step.dependOn(&translate_cmd.step);
 
     // Build all: build + add metadata

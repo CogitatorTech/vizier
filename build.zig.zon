@@ -2,11 +2,11 @@
     .name = .vizier,
     .version = "0.1.0-alpha.9",
     .fingerprint = 0x1d9e65e6e2e75d98, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .minish = .{
-            .url = "https://github.com/CogitatorTech/minish/archive/refs/tags/v0.3.0.tar.gz",
-            .hash = "minish-0.3.0-SQtSTYI3AgCxWdWbKxS_lvmfbp0wJk29ZW5C9CozJaxm",
+            .url = "https://github.com/CogitatorTech/minish/archive/refs/tags/v0.5.0.tar.gz",
+            .hash = "minish-0.5.0-SQtSTXUkAwA1iUHhQRCfM-092BYRlYDLTFCSodBi_EFq",
         },
         .@"extension-template-c" = .{
             .url = "https://github.com/habedi/extension-template-c-fork/archive/refs/heads/main.tar.gz",
